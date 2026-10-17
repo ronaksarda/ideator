@@ -398,7 +398,7 @@
 
   async function send(text) {
     const btn = $('send');
-    btn.disabled = true;
+    btn.classList.add('busy'); btn.textContent = 'Stop'; btn.setAttribute('aria-label', 'Stop this run');
     say('Off to read the market. Watch the map light up.');
     addMsg('user', esc(text));
     const agent = addMsg('agent', '<div class="meta">Working…</div><div class="body"></div>');
@@ -508,20 +508,30 @@
         agent.insertAdjacentHTML('beforeend', `<details style="margin-top: 8px;"><summary style="cursor: pointer; font-size: 11px; color: var(--muted);">FalkorDB Cypher Queries (${cypher.length})</summary><pre style="font-size: 11px; margin-top: 4px; padding: 6px; background: rgba(0,0,0,0.3); border-radius: 4px;">${esc(cypher.join('\n\n'))}</pre></details>`);
       }
     } catch (err) {
-      if (err.name === 'AbortError') { agent.remove(); return; }
+      if (err.name === 'AbortError') {
+        if (ctrl.byUser) { agent.querySelector('.meta').textContent = 'Stopped'; agent.querySelector('.body').textContent = 'You stopped this run. Edit your message and send it again.'; }
+        else agent.remove();
+        return;
+      }
       agent.classList.add('error');
       agent.querySelector('.meta').textContent = 'Request failed';
       agent.querySelector('.body').textContent = `${err.message}. Check that the server is running, then send again.`;
     } finally {
-      btn.disabled = false;
+      if (inflight === ctrl) inflight = null;
+      btn.classList.remove('busy'); btn.textContent = 'Send'; btn.removeAttribute('aria-label');
       feed.scrollTop = feed.scrollHeight;
     }
   }
 
   $('composer').addEventListener('submit', (e) => {
     e.preventDefault();
+    if ($('send').classList.contains('busy')) {  // Stop: cancel the running turn
+      if (inflight) { inflight.byUser = true; inflight.abort(); }
+      return;
+    }
+    if (listening) rec.stop();
     const t = $('msg').value.trim();
-    if (!t || $('send').disabled) return;
+    if (!t) return;
     $('msg').value = '';
     send(t);
   });
@@ -529,21 +539,37 @@
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('composer').requestSubmit(); }
   });
   // Voice input: browser speech-to-text (Chrome/Edge). Fills the box, then sends.
+  let listening = false, rec = null;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SR) {
-    const rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true;
+    rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true;
     $('mic').hidden = false;
-    let listening = false;
+    rec.continuous = true;
+    let base = '', heard = '';
     const micState = (on) => { listening = on; $('mic').classList.toggle('on', on); $('mic').setAttribute('aria-pressed', on);
       $('mic').title = on ? 'Stop listening' : 'Speak your message'; $('msg').placeholder = on ? 'Listening… click the mic again to stop' : 'Describe your idea or a change to it'; };
     $('mic').addEventListener('click', () => {
-      if (listening) { rec.stop(); return; }
+      if (listening) { micState(false); rec.stop(); return; }
       stopVoice();  // never record our own voice
+      base = $('msg').value.trim() ? $('msg').value.trim() + ' ' : ''; heard = '';
       try { rec.start(); micState(true); } catch (_) {}
     });
-    rec.onresult = (e) => { $('msg').value = [...e.results].map(r => r[0].transcript).join(''); };
-    rec.onend = () => { micState(false); if ($('msg').value.trim()) $('composer').requestSubmit(); };
-    rec.onerror = (e) => { micState(false); if (e.error !== 'aborted' && e.error !== 'no-speech') $('msg').placeholder = 'Mic error: ' + e.error; };
+    rec.onresult = (e) => {  // keep what you typed; add finished phrases; show the phrase in progress
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) heard += e.results[i][0].transcript.trim() + ' ';
+        else interim += e.results[i][0].transcript;
+      }
+      $('msg').value = (base + heard + interim).replace(/\s+/g, ' ').trimStart();
+    };
+    rec.onend = () => {  // the browser ends a session after a pause: carry on until you click the mic
+      if (listening) { base = $('msg').value.trim() + ' '; heard = ''; try { rec.start(); } catch (_) { micState(false); } }
+      else $('msg').focus();
+    };
+    rec.onerror = (e) => {  // silence is not an error: keep listening until you click the mic
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      micState(false); $('msg').placeholder = e.error === 'not-allowed' ? 'Allow microphone access to speak' : 'Mic error: ' + e.error;
+    };
   }
   $('empty').addEventListener('click', (e) => { const c = e.target.closest('.chip'); if (c) { $('msg').value = c.dataset.text; $('msg').focus(); } });
   $('chips').addEventListener('click', (e) => {
@@ -559,7 +585,7 @@
     $('empty').hidden = false; $('graph-empty').hidden = false; $('inspector').hidden = true; $('map-step').hidden = true;
     $('lineage').innerHTML = ''; $('sat-value').textContent = '–'; $('sat-fill').style.width = '0';
     $('sat-delta').textContent = ''; $('sat-meta').textContent = 'Describe an idea to score its market.';
-    $('send').disabled = false;
+    $('send').classList.remove('busy'); $('send').textContent = 'Send';
     if ($('sessions-select')) $('sessions-select').value = '';
     if (window.renderPlan) window.renderPlan(null);
   }

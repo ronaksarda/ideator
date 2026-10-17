@@ -40,7 +40,7 @@ def cap(page, text: str, hold: float = 0) -> None:
 def wait_turn(page, label: str) -> None:
     """Wait for the agent to finish a turn; that stretch plays fast in the final video."""
     start = now()
-    page.wait_for_function("() => !document.getElementById('send').disabled", timeout=600_000, polling=1000)
+    page.wait_for_function("() => !document.getElementById('send').classList.contains('busy')", timeout=600_000, polling=1000)
     segments.append((start, now(), 12.0))
     print(f"{label}: {now() - start:.0f}s", flush=True)
     page.wait_for_timeout(1500)

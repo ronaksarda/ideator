@@ -342,3 +342,4 @@ body.resizing { cursor: col-resize; user-select: none; }
 .mic.on { background: var(--grievance); border-color: var(--grievance); color: #fff; }
 .btn-tts.playing { border-color: var(--accent); color: var(--accent); }
 .agent-actions { margin-top: 10px; display: flex; gap: 8px; }
+#send.busy { background: var(--ink); color: var(--paper); }

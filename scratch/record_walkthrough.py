@@ -27,7 +27,7 @@ def mark(text: str) -> None:
 
 def wait_turn(page) -> None:
     start = now()
-    page.wait_for_function("() => !document.getElementById('send').disabled", timeout=600_000, polling=500)
+    page.wait_for_function("() => !document.getElementById('send').classList.contains('busy')", timeout=600_000, polling=500)
     segments.append((start, now(), FAST))
     page.wait_for_timeout(1200)
 
