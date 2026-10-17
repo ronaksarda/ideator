@@ -5,6 +5,7 @@ services:
     container_name: falkordb-ideator
     ports:
       - "6379:6379"
+      - "3000:3000"   # FalkorDB Browser: see the graph at http://localhost:3000
     volumes:
       - ./data/falkordb:/data
     restart: unless-stopped

@@ -21,9 +21,9 @@ try:
     from backend.graph import MarketGraph, entity_id, get_user_graph
     from backend.search import search_market
     from backend.tabular import evaluate_market_saturation
-    from backend.agent import ResearcherAgent, StrategistAgent, synthesize_attack_blueprint, _gemini_json
+    from backend.agent import ResearcherAgent, StrategistAgent, _gemini_json
     from backend.tools import build_server, run_graph_agent
-    from backend.agent import build_idea_report, render_report_md, node_insights, continue_idea_chat, llm_unavailable_note, data_only_report, followup_fallback, merge_brief, brief_md, first_brief, next_question
+    from backend.agent import build_idea_report, render_report_md, node_insights, continue_idea_chat, llm_unavailable_note, data_only_report, followup_fallback, merge_brief, brief_md, first_brief, next_question, agent_spec_md
     from backend.auth import router as auth_router, auth_enabled, require_user, current_user, GUEST
     from backend.session import classify_intent, match_targets, feature_vector
     from backend import guard
@@ -33,9 +33,9 @@ except ImportError:
     from ideator.backend.graph import MarketGraph, entity_id, get_user_graph
     from ideator.backend.search import search_market
     from ideator.backend.tabular import evaluate_market_saturation
-    from ideator.backend.agent import ResearcherAgent, StrategistAgent, synthesize_attack_blueprint, _gemini_json
+    from ideator.backend.agent import ResearcherAgent, StrategistAgent, _gemini_json
     from ideator.backend.tools import build_server, run_graph_agent
-    from ideator.backend.agent import build_idea_report, render_report_md, node_insights, continue_idea_chat, llm_unavailable_note, data_only_report, followup_fallback, merge_brief, brief_md, first_brief, next_question
+    from ideator.backend.agent import build_idea_report, render_report_md, node_insights, continue_idea_chat, llm_unavailable_note, data_only_report, followup_fallback, merge_brief, brief_md, first_brief, next_question, agent_spec_md
     from ideator.backend.auth import router as auth_router, auth_enabled, require_user, current_user, GUEST
     from ideator.backend.session import classify_intent, match_targets, feature_vector
     from ideator.backend import guard
@@ -48,7 +48,7 @@ if settings.sentry_dsn:
     except Exception:
         pass
 
-app = FastAPI(title="Ideator — Adversarial Market Intelligence Platform")
+app = FastAPI(title="Ideator")
 
 def _session_secret() -> str:
     """SESSION_SECRET from .env, else a random key generated once and kept in data/ (gitignored) so restarts keep sessions."""
@@ -158,9 +158,6 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
 
 
-class AnalyzeRequest(BaseModel):
-    idea: str = Field(..., min_length=1, max_length=600)
-
 
 @app.get("/health")
 def health_check():
@@ -246,6 +243,19 @@ def download_transcript(session_id: str, request: Request):
         lines.append(f"---\n\n### {'You' if m['role'] == 'user' else 'Ideator'}\n\n{m['text']}\n")
     return PlainTextResponse("\n".join(lines), media_type="text/markdown",
                              headers={"Content-Disposition": f'attachment; filename="ideator-{session_id[:8]}.md"'})
+
+
+@app.get("/api/session/{session_id}/agent-spec")
+def download_agent_spec(session_id: str, request: Request):
+    """AGENTS.md for a coding agent: the decided plan, version-1 scope, non-goals and the evidence behind them."""
+    if auth_enabled():
+        require_user(request)
+    sess = _own_session(session_id, request)
+    if not sess or not sess.get("memory", {}).get("report"):
+        raise HTTPException(status_code=404, detail="Nothing researched yet")
+    decisions = [n["data"].get("full_text") or n["data"].get("label", "") for n in sess.get("nodes", []) if n["data"].get("type") == "decision"]
+    return PlainTextResponse(agent_spec_md(sess["memory"], sess.get("plan") or [], decisions), media_type="text/markdown",
+                             headers={"Content-Disposition": 'attachment; filename="AGENTS.md"'})
 
 
 SESSION_LOCKS: Dict[str, asyncio.Lock] = {}
@@ -688,69 +698,6 @@ async def _followup(sess: Dict[str, Any], text: str, user_key: str, header: str 
 
 
 
-@app.post("/api/analyze")
-async def analyze_endpoint(payload: AnalyzeRequest, request: Request):
-    """
-    Observable SSE pipeline stream tested by test_sse_pipeline_stream_observable.
-    Emits LOG_STREAM, GRAPH_INGEST, CYPHER_TRAVERSAL, TABULAR_EVAL, CROSS_SESSION_MEMORY, PIPELINE_COMPLETE.
-    """
-    if auth_enabled():
-        require_user(request)
-    problem = guard.check_message(payload.idea, True)
-    if problem:
-        return _refuse(400, problem)
-    if not os.getenv("PYTEST_CURRENT_TEST") and guard.new_ideas.retry_after(_client_key(request)):
-        return _refuse(429, "Limit reached (3 new ideas per hour).")
-
-    async def pipeline_stream():
-        idea = payload.idea
-        u_id = f"idea_{entity_id('pipeline', idea)}"
-
-        # 1. LOG_STREAM
-        market_data = await asyncio.to_thread(search_market, idea)
-        badge = "LIVE_SERPAPI" if market_data.get("source_mode") == "LIVE_SERPAPI" else "DETERMINISTIC_FALLBACK"
-        yield f"data: {json.dumps({'stage': 'LOG_STREAM', 'source_badge': badge, 'competitors': market_data.get('competitors', []), 'complaints': market_data.get('complaints', [])})}\n\n"
-        await asyncio.sleep(0.05)
-
-        # 2. Ingest
-        graph.insert_market_nodes(u_id, idea, market_data.get("competitors", []), market_data.get("complaints", []))
-
-        # 3. GRAPH_INGEST
-        cytoscape_elements = graph.get_full_graph_elements(u_id)
-        yield f"data: {json.dumps({'stage': 'GRAPH_INGEST', 'cytoscape': cytoscape_elements})}\n\n"
-        await asyncio.sleep(0.05)
-
-        # 4. CYPHER_TRAVERSAL
-        wedge_data, meta = graph.query_unserved_wedge_with_meta(u_id)
-        top_feature = wedge_data[0]["feature"] if wedge_data else "Local-First Core"
-        yield f"data: {json.dumps({'stage': 'CYPHER_TRAVERSAL', 'cypher_query': meta['cypher_query'], 'unserved_wedge_feature': top_feature, 'rows': len(wedge_data)})}\n\n"
-        await asyncio.sleep(0.05)
-
-        # 5. TABULAR_EVAL
-        comps = market_data.get("competitors", [])
-        complaints = market_data.get("complaints", [])
-        first_price = float(comps[0].get("price_usd", 49.0)) if comps else 49.0
-        tab_res = evaluate_market_saturation(
-            competitor_count=len(comps),
-            median_price_usd=first_price,
-            complaint_count=len(complaints),
-            has_open_source=1,
-            review_volume=250
-        )
-        yield f"data: {json.dumps({'stage': 'TABULAR_EVAL', 'feature_vector': {'competitors': len(comps)}, 'saturation_index': tab_res['saturation_index'], 'risk_tier': tab_res['risk_tier']})}\n\n"
-        await asyncio.sleep(0.05)
-
-        # 6. CROSS_SESSION_MEMORY
-        ledger = graph.get_memory_ledger()
-        yield f"data: {json.dumps({'stage': 'CROSS_SESSION_MEMORY', 'memory_ledger': ledger, 'past_sessions': ledger.get('historical_ideas', [])})}\n\n"
-        await asyncio.sleep(0.05)
-
-        # 7. PIPELINE_COMPLETE
-        blueprint = synthesize_attack_blueprint(idea, wedge_data, tab_res)
-        yield f"data: {json.dumps({'stage': 'PIPELINE_COMPLETE', 'blueprint': blueprint})}\n\n"
-
-    return StreamingResponse(pipeline_stream(), media_type="text/event-stream")
-
 
 def _client_key(request: Request) -> str:
     user = current_user(request)
@@ -843,10 +790,3 @@ def get_index():
         return HTMLResponse(content=chat_file.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>Chat UI not found</h1>", status_code=404)
 
-
-@app.get("/pipeline", response_class=HTMLResponse)
-def get_pipeline_page():
-    pipe_file = frontend_dir / "index.html"
-    if pipe_file.exists():
-        return HTMLResponse(content=pipe_file.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>Pipeline UI not found</h1>", status_code=404)

@@ -1,5 +1,5 @@
 """End-to-end check of every feature the README claims, against the running app (http://127.0.0.1:8000),
-FalkorDB and Temporal. Usage: python scratch/verify_claims.py"""
+FalkorDB and Temporal. Usage: python scripts/verify_claims.py"""
 import json
 import subprocess
 import sys

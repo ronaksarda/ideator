@@ -122,43 +122,109 @@ RETURN d.id, count(n), collect(n.id)
 
 ## Local setup
 
-Requirements: Python 3.12 and Docker.
+Ideator runs on your machine: the app, a FalkorDB graph database and (optionally) a Temporal server. Setup takes
+about 10 minutes, most of it waiting for Docker images.
 
+### 1. What you need installed
+
+| Tool | Why | Get it |
+|---|---|---|
+| Python 3.12 | Runs the app | https://www.python.org/downloads/ |
+| Docker Desktop | Runs FalkorDB and Temporal | https://www.docker.com/products/docker-desktop/ |
+| Ollama (optional) | Local Gemma fallback when the hosted model fails | https://ollama.com/download |
+
+### 2. Get the code and the Python packages
+
+```bash
+git clone https://github.com/ronaksarda/ideator.git
+```
+```bash
+cd ideator
+```
+```bash
+python -m venv .venv
+```
+Activate it: `.venv\Scripts\activate` on Windows, `source .venv/bin/activate` on macOS/Linux. Then:
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Start the databases
+
+Start Docker Desktop first, then:
 ```bash
 docker compose up -d falkordb temporal
 ```
 
+This starts:
+
+| Service | Port | What it is |
+|---|---|---|
+| FalkorDB | 6379 | The graph database. Required: without it the agent has no tools and nothing to reason over. |
+| FalkorDB Browser | http://localhost:3000 | Look at the graph the app builds (connect to `localhost:6379`). |
+| Temporal | 7233 | Runs search and report as retried workflows. Optional: without it those steps run directly. |
+| Temporal UI | http://localhost:8233 | See each workflow run. |
+
+### 4. Add your API keys
+
+Copy the example file and fill it in:
 ```bash
-pip install -r ideator/requirements.txt
+cp .env.example .env
 ```
 
-Create `.env` in the repo root:
+| Key | Required? | What it powers | Where to get it | Without it |
+|---|---|---|---|---|
+| `FALKORDB_HOST`, `FALKORDB_PORT` | Yes | Graph database address | Leave `localhost` and `6379` | Nothing works |
+| `GEMINI_API_KEY` | Yes | The Gemma models (`gemma-4-26b-a4b-it`, then `gemma-4-31b-it`) that run the agent and write the report | Google AI Studio: https://aistudio.google.com/apikey | A fixed evidence plan and a report built only from search data |
+| `SERPAPI_API_KEY` | Yes | Live search: Google, Google Play, Reddit | https://serpapi.com/manage-api-key (free plan: 100 searches a month; one idea uses about 3) | No live market data |
+| `TABPFN_API_KEY` | Recommended | `predict_price`: TabPFN price prediction | https://ux.priorlabs.ai (sign up, copy the access token) | The price step reports that the key is missing |
+| `ELEVENLABS_API_KEY` | Optional | The Listen button | https://elevenlabs.io/app/settings/api-keys | Listen says the voice is unavailable |
+| `SENTRY_DSN` | Optional | Tracing: one transaction per chat turn, one span per Gemma and MCP tool call | sentry.io: create a Python project, copy the DSN | No traces |
+| `SESSION_SECRET` | Optional | Signs the session cookie | Any long random string | A key is generated once and saved in `ideator/data/` |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Optional | GitHub sign-in | GitHub, Settings, Developer settings, OAuth Apps (callback: `http://localhost:8000/auth/callback`) | Guest mode: each browser gets its own private sessions |
 
+`.env` is in `.gitignore`. Never commit it.
+
+### 5. Optional: the local fallback model
+
+```bash
+ollama pull gemma2:2b
 ```
-FALKORDB_HOST=localhost
-FALKORDB_PORT=6379
-SERPAPI_API_KEY=...      # live search
-GEMINI_API_KEY=...       # Google AI Studio key, used for the Gemma models
-TABPFN_API_KEY=...       # optional: saturation model
-ELEVENLABS_API_KEY=...   # optional: voice
-SENTRY_DSN=...           # optional
+```bash
+ollama serve
 ```
 
-Run the app:
+### 6. Run it
 
 ```bash
 python -m uvicorn ideator.backend.main:app --port 8000
 ```
 
-Open http://localhost:8000. Optional: install Ollama and run `ollama pull gemma2:2b` for the local fallback.
+Open http://localhost:8000 and describe an idea in one line. Add `?debug=1` to the URL to see the Cypher every
+agent step runs.
 
-Run the tests:
+### 7. Check that everything works
 
+Unit tests (about 20 seconds; the graph-agent tests need FalkorDB running):
 ```bash
 python -m pytest -q
 ```
 
-The graph-agent tests (`tests/test_layer8_graph_agent.py`) need FalkorDB running. They are skipped otherwise.
+End-to-end check of every claim in this README against the running app (about 4 minutes, uses about 3 searches):
+```bash
+python scripts/verify_claims.py
+```
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `Connection refused` on 6379 | Docker Desktop isn't running, or run `docker compose up -d falkordb` again |
+| Docker Desktop won't start on Windows | Quit Docker, rename `%LOCALAPPDATA%\docker-secrets-engine`, start Docker again |
+| Report says the AI model was unavailable | Google's hosted Gemma returned errors; try again in a minute, or run Ollama for the fallback |
+| "Too many requests" | Rate limits: 3 new ideas per hour, 20 messages per 10 minutes. Restarting the app resets them |
+| Port 8000 in use | Add `--port 8001` to the run command |
+| Mic doesn't work | Use Chrome or Edge and allow microphone access |
 
 ---
 

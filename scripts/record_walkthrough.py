@@ -1,6 +1,6 @@
 """Records a 2-3 minute walkthrough of every feature, with no captions, for a voiceover. Waits for the agent are
 sped up 4x so the graph walk stays readable. Writes demo/walkthrough.mp4 and demo/shotlist.md (timestamps in the
-final video). Usage: python scratch/record_walkthrough.py"""
+final video). Usage: python scripts/record_walkthrough.py"""
 import json
 import shutil
 import subprocess

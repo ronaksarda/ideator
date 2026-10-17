@@ -1,6 +1,6 @@
 """Records the demo video against the running app (http://127.0.0.1:8000): three turns of one idea, from first
 search to a locked plan, shown in light and dark. Waits are sped up afterwards with ffmpeg.
-Usage: python scratch/record_demo.py  ->  demo/ideator-demo.mp4"""
+Usage: python scripts/record_demo.py  ->  demo/ideator-demo.mp4"""
 import json
 import shutil
 import subprocess

@@ -1,9 +1,0 @@
-services:
-  falkordb:
-    image: falkordb/falkordb:latest
-    container_name: ideator_falkordb
-    ports:
-      - "6379:6379"
-    volumes:
-      - ./data/falkordb:/data
-    restart: unless-stopped

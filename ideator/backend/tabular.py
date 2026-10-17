@@ -24,7 +24,7 @@ def _heuristic_bayesian_eval(
     has_oss: int
 ) -> Dict[str, Any]:
     """
-    Zero-Crash Heuristic Bayesian Fallback Engine.
+    Heuristic fallback used when TabPFN is unavailable.
     S = sigmoid(0.35 * n_comp + 0.015 * p_median - 0.08 * n_complaints - 0.8 * has_oss)
     """
     z = 0.35 * n_comp + 0.015 * p_median - 0.08 * n_complaints - 0.8 * has_oss
@@ -72,7 +72,7 @@ def evaluate_market_saturation(
     """
     Dual-Engine Tabular Saturation Analysis:
     1. Primary: TabPFNClassifier (device='cpu') when token present.
-    2. Fallback: Heuristic Bayesian scoring engine with zero-crash guarantee.
+    2. Fallback: heuristic scoring that never raises.
     """
     # Parse inputs from positional args or kwargs
     if args and isinstance(args[0], (list, tuple)):

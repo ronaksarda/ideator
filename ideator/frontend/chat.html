@@ -127,7 +127,13 @@
     <button type="button" data-view="plan" aria-pressed="false">Plan</button>
   </nav>
   <dialog id="export" class="export" aria-labelledby="export-title">
-    <header><h2 id="export-title">Session as Markdown</h2><button type="button" class="ghost" id="export-close">Close</button></header>
+    <header><h2 id="export-title">Export</h2>
+      <div class="export-modes" role="group" aria-label="What to export">
+        <button type="button" data-mode="spec" aria-pressed="true">For your coding agent (AGENTS.md)</button>
+        <button type="button" data-mode="transcript" aria-pressed="false">Full transcript</button>
+      </div>
+      <button type="button" class="ghost" id="export-close">Close</button></header>
+    <p class="export-hint muted small" id="export-hint"></p>
     <textarea id="export-text" readonly aria-label="Session transcript in Markdown"></textarea>
     <footer><span id="export-note" class="muted small" aria-live="polite"></span>
       <button type="button" class="ghost" id="export-copy">Copy</button>

@@ -72,3 +72,16 @@ def test_build_brief_converges_over_turns():
     brief = merge_brief(brief, {"who": "students", "pain": ""})  # an empty answer never erases a decided slot
     assert brief["pain"] == "plans ignore budget" and brief["who"] == "students"
     assert next_question({k: "x" for k in brief}) == ""
+
+
+def test_agent_spec_carries_decisions_scope_and_evidence():
+    from ideator.backend.agent import agent_spec_md
+    mem = {"report": {"idea": "Shared grocery list", "competitors": [{"name": "Mealime", "price": "$0", "worst_at": "sharing"}],
+                      "features": [{"name": "Recipe feed", "verdict": "cut", "why": "everyone has one"}],
+                      "sources": [{"quote": "lists are messy", "about": "Mealime", "url": "https://reddit.com/x"}]},
+           "brief": {"who": "roommates", "pain": "", "edge": "", "price": "$4/mo", "mvp": ""}, "brief_question": "Who pays first?"}
+    md = agent_spec_md(mem, [{"feature": "Cost split", "ideas": ["split button"], "problem": "awkward math"}], ["Lead with cost split"])
+    assert md.startswith("# AGENTS.md: Shared grocery list")
+    assert "**Who pays:** roommates" in md and "_not decided yet_" in md
+    assert "1. **Cost split**: split button" in md and "Recipe feed: everyone has one" in md
+    assert "Lead with cost split" in md and "https://reddit.com/x" in md and "Who pays first?" in md

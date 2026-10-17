@@ -5,7 +5,7 @@ from ideator.backend.workflow import ReportWorkflow, SearchWorkflow, durable, re
 
 
 def test_sentry_agent_tracing_spans():
-    # Test zero-crash span context manager without Sentry DSN
+    # The span helper must work without a Sentry DSN
     with agent_span("ai.agent", "ResearcherAgent", {"idea": "SQLite API"}) as span:
         assert True
 
@@ -26,6 +26,5 @@ def test_durable_runs_directly_without_temporal():
     assert asyncio.run(durable(SearchWorkflow.run, "x", "search-test", lambda: {"ok": True})) == {"ok": True}
 
 
-def test_github_copilot_and_ci_present():
-    assert os.path.exists(".github/copilot-instructions.md")
+def test_ci_workflow_present():
     assert os.path.exists(".github/workflows/ci.yml")

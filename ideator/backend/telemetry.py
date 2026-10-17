@@ -12,9 +12,8 @@ def agent_span(
     data: Optional[Dict[str, Any]] = None
 ) -> Generator[Any, None, None]:
     """
-    Ponytail: Zero-overhead Sentry Agent Tracing span helper.
-    Records op (ai.agent, ai.tool_call, ai.run), latency, tokens, and metadata.
-    Passes through cleanly if Sentry is not configured.
+    Sentry span for one agent step (a Gemma call or an MCP tool call), nested under the turn's transaction.
+    Does nothing when Sentry is not configured.
     """
     span = None
     try:

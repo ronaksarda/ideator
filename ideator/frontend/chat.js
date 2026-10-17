@@ -590,13 +590,28 @@
     if (window.renderPlan) window.renderPlan(null);
   }
   // Export: show the Markdown first, so it works even where the browser blocks file downloads (embedded panes).
-  $('download').addEventListener('click', async () => {
-    const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/transcript`);
-    if (!res.ok) { addMsg('agent', '<div class="meta">Export</div><div class="body">Nothing to export yet. Send your idea first.</div>'); return; }
+  const EXPORTS = {
+    spec: { url: 'agent-spec', file: 'AGENTS.md', hint: 'Drop this file into your project and your coding agent (Claude Code, Cursor, Codex) builds version 1 from it: the decisions, the scope, what not to build, and the evidence.' },
+    transcript: { url: 'transcript', file: '', hint: 'Everything said in this session, with the plan at the top.' },
+  };
+  let exportMode = 'spec';
+  async function loadExport(mode) {
+    const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/${EXPORTS[mode].url}`);
+    if (!res.ok) return false;
+    exportMode = mode;
     $('export-text').value = await res.text();
+    $('export-hint').textContent = EXPORTS[mode].hint;
     $('export-note').textContent = '';
+    document.querySelectorAll('.export-modes button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.mode === mode));
+    return true;
+  }
+  $('download').addEventListener('click', async () => {
+    if (!(await loadExport('spec')) && !(await loadExport('transcript'))) {
+      addMsg('agent', '<div class="meta">Export</div><div class="body">Nothing to export yet. Send your idea first.</div>'); return;
+    }
     $('export').showModal();
   });
+  document.querySelector('.export-modes').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) loadExport(b.dataset.mode); });
   $('export-close').addEventListener('click', () => $('export').close());
   $('export-copy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText($('export-text').value); $('export-note').textContent = 'Copied.'; }
@@ -605,7 +620,7 @@
   $('export-save').addEventListener('click', () => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([$('export-text').value], { type: 'text/markdown' }));
-    a.download = `ideator-${sessionId.slice(0, 8)}.md`;
+    a.download = EXPORTS[exportMode].file || `ideator-${sessionId.slice(0, 8)}.md`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     $('export-note').textContent = 'Saved to your downloads. If nothing appeared, use Copy.';
