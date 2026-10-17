@@ -1,0 +1,1 @@
+{"version":"0.0.1","configurations":[{"name":"ideator","runtimeExecutable":"python","runtimeArgs":["-m","uvicorn","ideator.backend.main:app","--port","8000"],"autoPort":false,"port":8000}]}

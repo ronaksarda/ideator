@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ideator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="/static/chat.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/layout-base@2.0.1/layout-base.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cose-base@2.2.0/cose-base.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-fcose@2.2.0/cytoscape-fcose.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+</head>
+<body>
+  <canvas id="rain" aria-hidden="true"></canvas>
+  <div id="gate" class="gate" hidden>
+    <div class="gate-card">
+      <h1>Ideator</h1>
+      <p>Test a product idea against real competitors. Every version you try is saved, so you can compare and come back later.</p>
+      <a class="primary gate-btn" href="/auth/login">Sign in with GitHub</a>
+      <p class="muted small">We read your public GitHub profile only, to keep your idea sessions separate.</p>
+    </div>
+  </div>
+  <main class="console" id="console">
+    <section class="left" aria-label="Conversation">
+      <header class="top">
+        <div class="brand">
+          <h1>Ideator</h1>
+          <div class="account">
+            <label for="sessions-select" class="sr-only">Past sessions</label><select id="sessions-select" class="session-select" title="Open a past idea session"><option value="">Past sessions…</option></select>
+            <button id="download" class="ghost" type="button">Download transcript</button>
+            <button id="theme" class="ghost" type="button" aria-label="Switch light or dark theme">Theme</button>
+            <button id="new-session" class="ghost" type="button">New session</button>
+            <span id="user" class="user" hidden><img id="avatar" alt="" width="22" height="22"><span id="user-name"></span></span>
+            <button id="logout" class="ghost" type="button" hidden>Sign out</button>
+          </div>
+        </div>
+        <ol id="lineage" class="lineage" aria-label="Idea versions"></ol>
+      </header>
+
+      <section class="score" aria-labelledby="score-title">
+        <h2 id="score-title">How crowded is this market?</h2>
+        <div class="score-row">
+          <span id="sat-value" class="sat-value">–</span>
+          <span id="sat-delta" class="sat-delta"></span>
+        </div>
+        <div class="bar" role="meter" aria-labelledby="score-title" aria-valuemin="0" aria-valuemax="100" id="sat-meter">
+          <div id="sat-fill" class="bar-fill"></div>
+        </div>
+        <p id="sat-meta" class="muted small">Describe an idea to score its market.</p>
+      </section>
+
+      <section class="feed" id="feed" aria-live="polite">
+        <div class="empty" id="empty">
+          <p>Start with the product you want to build, for example
+            <em>“Cloud logging and observability tool”</em>.</p>
+          <p class="muted small">Your first message looks up competitors and what users hate about them. After that, describe changes
+            and see if the market gets less crowded. Start with <code>new idea:</code> to look up a different market.</p>
+        </div>
+      </section>
+
+      <form id="composer" class="composer">
+        <div class="chips" id="chips" aria-label="Suggested changes for this idea" hidden></div>
+        <div class="input-row">
+          <label for="msg" class="sr-only">Message</label>
+          <textarea id="msg" rows="2" maxlength="600" placeholder="Describe your idea or a change to it"></textarea>
+          <button id="mic" type="button" class="ghost" aria-label="Speak your message" hidden>Mic</button>
+          <button id="send" type="submit" class="primary">Send</button>
+        </div>
+      </form>
+    </section>
+
+    <div id="split" class="split" role="separator" aria-orientation="vertical" aria-label="Resize chat and map. Arrow keys move it, double-click resets." tabindex="0"></div>
+    <section class="right" aria-label="Knowledge graph">
+      <div class="tabs" role="tablist" aria-label="Graph views">
+        <button id="tab-map" role="tab" aria-selected="true" type="button">Market map</button>
+        <button id="tab-plan" role="tab" aria-selected="false" type="button">Action plan</button>
+      </div>
+      <div id="plan" class="plan" role="tabpanel" aria-labelledby="tab-plan" hidden></div>
+      <div id="cy" class="cy" role="img" aria-label="Market graph. Select a node to inspect it."></div>
+      <div class="graph-empty" id="graph-empty">Your market map shows up here after your first message.</div>
+      <ul class="legend" aria-label="Legend">
+        <li><i class="sw idea"></i>Idea version</li>
+        <li><i class="sw competitor"></i>Similar company</li>
+        <li><i class="sw grievance"></i>What users say</li>
+        <li><i class="sw feature"></i>Feature</li>
+        <li><i class="sw decision"></i>Agent decision</li>
+        <li><i class="ln solves"></i>Fixes</li>
+        <li><i class="ln omits"></i>Dropped</li>
+      </ul>
+      <aside id="inspector" class="inspector" hidden aria-labelledby="insp-title">
+        <div class="insp-head">
+          <h2 id="insp-title">Node</h2>
+          <button id="insp-close" class="ghost" type="button" aria-label="Close inspector">Close</button>
+        </div>
+        <div id="insp-body"></div>
+      </aside>
+    </section>
+  </main>
+  <script src="/static/chat.js"></script>
+</body>
+</html>

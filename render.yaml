@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: ideator
+    runtime: python
+    buildCommand: pip install -r ideator/requirements.txt
+    startCommand: uvicorn ideator.backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: FALKORDB_HOST
+        sync: false
+      - key: FALKORDB_PORT
+        value: "6379"
+      - key: SERPAPI_API_KEY
+        sync: false
+      - key: TABPFN_API_KEY
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true

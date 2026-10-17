@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: falkordb-ideator
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/falkordb:/data
+    restart: unless-stopped
+
+  temporal:
+    image: temporalio/temporal:latest
+    container_name: temporal-ideator
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--ui-port", "8233"]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    restart: unless-stopped
