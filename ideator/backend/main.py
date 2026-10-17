@@ -691,8 +691,9 @@ async def _followup(sess: Dict[str, Any], text: str, user_key: str, header: str 
             reply += "\n\n" + brief_md(mem["brief"], mem["brief_question"])
     if reply and header:
         reply = f"*{header}*\n\n{reply}"
-    if not reply and llm_unavailable_note():
-        reply = f"*{header}*\n\n" + followup_fallback(text, mem.get("graph_findings") or [], sess.get("plan") or []) + llm_unavailable_note()
+    if not reply:  # Gemma failed or returned unreadable output: answer from the graph findings, never a bare header
+        reply = (f"*{header}*\n\n" if header else "") + followup_fallback(text, mem.get("graph_findings") or [], sess.get("plan") or []) + \
+            "\n\n" + brief_md(merge_brief(mem.get("brief"), {}), mem.get("brief_question", "")) + llm_unavailable_note()
     _remember(sess, "assistant", reply or header, session_id)
     return reply
 

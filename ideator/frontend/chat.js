@@ -51,6 +51,7 @@
       { selector: 'edge[label = "OMITS"]', style: { 'width': 1.5, 'line-style': 'dashed', 'line-color': css('--muted'), 'target-arrow-color': css('--muted') } },
   ];
   const cy = cytoscape({
+    maxZoom: 2.2,  // never so close that one label fills the map
     container: $('cy'),
     style: graphStyle(),
   });
@@ -446,7 +447,8 @@
             const path = walked.union(walked.edgesWith(walked));
             path.addClass('evidence');
             $('map-step').textContent = `Step ${ev.step}: ${said}`; $('map-step').hidden = false;
-            if (walked.length) cy.animate({ fit: { eles: path, padding: 70 } }, { duration: reducedMotion ? 0 : 600 });
+            // a step that touched only a node or two would zoom right into it: frame it with context instead
+            if (walked.length) cy.animate(walked.length < 4 ? { center: { eles: path }, zoom: Math.min(cy.zoom(), 1.1) } : { fit: { eles: path, padding: 70 } }, { duration: reducedMotion ? 0 : 600 });
             agent.querySelector('.meta').textContent = `Analyzing the market graph (step ${ev.step})…`;
           }
           else if (ev.type === 'plan') window.renderPlan(ev.items, ev.brief, ev.question);

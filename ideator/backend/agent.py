@@ -287,7 +287,7 @@ def _gemini_json(prompt: str, timeout: float = 30.0) -> Optional[Dict[str, Any]]
     if not raw or "{" not in raw:
         return None
     try:
-        out = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
+        out = json.loads(raw[raw.find("{"):raw.rfind("}") + 1], strict=False)  # Gemma often puts raw newlines inside strings
     except ValueError:
         logger.warning("Advisor returned non-JSON output")
         return None

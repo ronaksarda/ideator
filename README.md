@@ -205,15 +205,11 @@ agent step runs.
 
 ### 7. Check that everything works
 
-Unit tests (about 20 seconds; the graph-agent tests need FalkorDB running):
+Tests (about 20 seconds; the graph-agent tests need FalkorDB running):
 ```bash
 python -m pytest -q
 ```
 
-End-to-end check of every claim in this README against the running app (about 4 minutes, uses about 3 searches):
-```bash
-python scripts/verify_claims.py
-```
 
 ### Troubleshooting
 
