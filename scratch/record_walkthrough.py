@@ -133,7 +133,8 @@ def main() -> None:
             card.click()
             mark("Click a build step: the map jumps to that feature and explains it, with the companies and complaints behind it.")
             pause(page, 6)
-            page.click("#insp-close")
+            if page.is_visible("#insp-close"):
+                page.click("#insp-close")
 
         box = page.locator("#split").bounding_box()
         if box:

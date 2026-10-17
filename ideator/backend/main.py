@@ -807,9 +807,10 @@ async def text_to_speech(payload: Dict[str, str], request: Request):
         voice_id = "JBFqnCBsd6RMkjVDRZzb"
         tts_url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
         req_data = json.dumps({
-            "text": text[:500],
+            "text": text[:900],
             "model_id": "eleven_multilingual_v2",
-            "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}
+            # lower stability = more natural, conversational delivery; speaker boost keeps the voice clear
+            "voice_settings": {"stability": 0.4, "similarity_boost": 0.8, "style": 0.3, "use_speaker_boost": True}
         }).encode("utf-8")
         req = urllib.request.Request(
             tts_url,
@@ -821,7 +822,7 @@ async def text_to_speech(payload: Dict[str, str], request: Request):
             },
             method="POST"
         )
-        with urllib.request.urlopen(req, timeout=10.0) as resp:
+        with urllib.request.urlopen(req, timeout=30.0) as resp:
             audio_bytes = resp.read()
             return StreamingResponse(iter([audio_bytes]), media_type="audio/mpeg")
     except Exception as e:

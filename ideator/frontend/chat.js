@@ -218,6 +218,7 @@
     const summary = done ? [b.mvp ? `Build ${lc(b.mvp)}` : 'Build a first version', b.who ? ` for ${lc(b.who)}.` : '.', b.price ? ` Charge ${b.price}.` : '',
       b.edge ? ` You win because: ${b.edge}.` : '', b.pain ? ` It fixes: ${b.pain}.` : ''].join('').replace(/\.\./g, '.') : '';
     const locked = done === 5;
+    lastBrief = { b, done, question, summary };
     if (locked) say('Plan locked. Go build it!');
     else if (done) say(done === 1 ? 'One decision down. Four to go.' : `${done} of 5 decided. One question at a time.`);
     if (locked && !document.body.classList.contains('locked')) {  // the moment the plan is decided: mark it once
@@ -247,16 +248,66 @@
   $('plan').addEventListener('click', (e) => {
     const card = e.target.closest('.plan-card'); if (!card || card.classList.contains('brief')) return;
     const p = planItems[card.dataset.i];
-    const comp = (p.who_has_it || '').split(',')[0].trim().toLowerCase();  // topic may not be a drawn feature: fall back to the company
     let node = cy.nodes('[type = "feature"]').filter((f) => planFor(lbl(f)) === p).first();
-    if (!node.length && comp) node = cy.nodes('[type = "competitor"]').filter((c) => lbl(c).toLowerCase() === comp).first();
-    showTab('map');
+    const who = (p.who_has_it || '').toLowerCase();  // "Datadog (but no caps), New Relic": match any named company
+    if (!node.length && who) node = cy.nodes('[type = "competitor"]').filter((c) => lbl(c) && who.includes(lbl(c).toLowerCase())).first();
+    showTab('map'); setView('map');
     if (node.length) { cy.$(':selected').unselect(); node.select(); cy.animate({ center: { eles: node }, zoom: 1.4 }); node.emit('tap'); }
+    else { $('map-step').textContent = `"${p.feature}" is a new opening: no company on the map offers it yet.`; $('map-step').hidden = false; }
   });
   function showTab(t) {
     $('tab-map').setAttribute('aria-selected', t === 'map'); $('tab-plan').setAttribute('aria-selected', t === 'plan');
     $('plan').hidden = t !== 'plan';
   }
+  // Voice: one player at a time, stoppable.
+  let voice = null;
+  function stopVoice() {
+    if (!voice) return;
+    voice.audio.pause();
+    voice.btn.classList.remove('playing'); voice.btn.textContent = 'Listen'; voice.btn.disabled = false;
+    voice = null;
+  }
+  // What the voice says: a short spoken version of the reply, never links, tables or markdown.
+  function spokenSummary(agent) {
+    const body = agent.querySelector('.body').cloneNode(true);
+    body.querySelectorAll('table, pre, details, .trace, a').forEach((n) => n.remove());
+    const heads = [...body.querySelectorAll('h2')];
+    const section = (h) => { const parts = []; for (let n = h.nextElementSibling; n && n.tagName !== 'H2'; n = n.nextElementSibling) parts.push(n.innerText); return parts.join(' '); };
+    const first = heads.find((h) => !/brief|where this comes from|sources/i.test(h.textContent));
+    let opening = first ? section(first) : body.innerText;
+    opening = (opening.match(/[^.!?]+[.!?]/g) || [opening]).slice(0, 3).join(' ');
+    const b = lastBrief.b || {}, done = lastBrief.done || 0;
+    const status = done === 5 ? `Your plan is locked. ${lastBrief.summary}`
+      : done ? `So far you've decided ${done} of five things.` : '';
+    const next = done < 5 && lastBrief.question ? `Next, I need you to decide this. ${lastBrief.question.replace(/Suggested from the evidence:/i, 'My suggestion:')}` : '';
+    return [opening, status, next].join(' ')
+      .replace(/https?:\/\/\S+/g, '').replace(/(^|\s)(\d)\)\s/g, '$1option $2, ').replace(/\((?:reddit|source|google play|google)\)/gi, '').replace(/[*_#`|>•~]/g, '')
+      .replace(/\(\s*\)/g, '').replace(/\s+([,.])/g, '$1').replace(/\s{2,}/g, ' ').trim().slice(0, 900);
+  }
+  let lastBrief = {};
+  // Listen on any reply (live or restored): one delegated handler.
+  $('feed').addEventListener('click', async (e) => {
+    const ttsBtn = e.target.closest('.btn-tts'); if (!ttsBtn) return;
+    const agent = ttsBtn.closest('.msg');
+    if (ttsBtn.classList.contains('playing')) { stopVoice(); return; }
+    stopVoice();
+    ttsBtn.disabled = true;
+    ttsBtn.textContent = 'Loading…';
+    try {
+      const resp = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: spokenSummary(agent) }) });
+      if (!resp.ok) throw new Error('voice failed');
+      const audio = new Audio(URL.createObjectURL(await resp.blob()));
+      voice = { audio, btn: ttsBtn };
+      ttsBtn.disabled = false; ttsBtn.classList.add('playing'); ttsBtn.textContent = 'Stop';
+      audio.onended = stopVoice;
+      await audio.play();
+    } catch (_) {
+      stopVoice();
+      ttsBtn.textContent = 'Voice unavailable right now';
+      setTimeout(() => { ttsBtn.textContent = 'Listen'; ttsBtn.disabled = false; }, 3500);
+    }
+  });
   // Mascot: a little cloud that says what is happening. Decoration only; the same news is in the chat.
   let sayTimer;
   function say(text) {
@@ -453,34 +504,6 @@
         });
       }
 
-      // Event listener: ElevenLabs voice synthesis
-      const ttsBtn = agent.querySelector('.btn-tts');
-      if (ttsBtn) {
-        ttsBtn.addEventListener('click', async () => {
-          ttsBtn.disabled = true;
-          ttsBtn.textContent = 'Loading voice…';
-          try {
-            const rawText = agent.dataset.fullText || agent.querySelector('.body').textContent || '';
-            const cleanSpeech = rawText.replace(/[*#`•]/g, '').slice(0, 400);
-            const resp = await fetch('/api/tts', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text: cleanSpeech })
-            });
-            if (!resp.ok) throw new Error('ElevenLabs API key required or generation failed');
-            const blob = await resp.blob();
-            const audioUrl = URL.createObjectURL(blob);
-            const audio = new Audio(audioUrl);
-            audio.play();
-            ttsBtn.textContent = 'Playing…';
-            audio.onended = () => { ttsBtn.textContent = 'Listen'; ttsBtn.disabled = false; };
-          } catch (e) {
-            ttsBtn.textContent = 'Voice unavailable right now';
-            setTimeout(() => { ttsBtn.textContent = 'Listen'; ttsBtn.disabled = false; }, 3500);
-          }
-        });
-      }
-
       if (DEBUG && cypher.length) {
         agent.insertAdjacentHTML('beforeend', `<details style="margin-top: 8px;"><summary style="cursor: pointer; font-size: 11px; color: var(--muted);">FalkorDB Cypher Queries (${cypher.length})</summary><pre style="font-size: 11px; margin-top: 4px; padding: 6px; background: rgba(0,0,0,0.3); border-radius: 4px;">${esc(cypher.join('\n\n'))}</pre></details>`);
       }
@@ -510,10 +533,17 @@
   if (SR) {
     const rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true;
     $('mic').hidden = false;
-    $('mic').addEventListener('click', () => { rec.start(); $('mic').textContent = '● Listening'; });
+    let listening = false;
+    const micState = (on) => { listening = on; $('mic').classList.toggle('on', on); $('mic').setAttribute('aria-pressed', on);
+      $('mic').title = on ? 'Stop listening' : 'Speak your message'; $('msg').placeholder = on ? 'Listening… click the mic again to stop' : 'Describe your idea or a change to it'; };
+    $('mic').addEventListener('click', () => {
+      if (listening) { rec.stop(); return; }
+      stopVoice();  // never record our own voice
+      try { rec.start(); micState(true); } catch (_) {}
+    });
     rec.onresult = (e) => { $('msg').value = [...e.results].map(r => r[0].transcript).join(''); };
-    rec.onend = () => { $('mic').textContent = 'Mic'; if ($('msg').value.trim()) $('composer').requestSubmit(); };
-    rec.onerror = (e) => { $('mic').textContent = 'Mic'; $('msg').placeholder = 'Mic error: ' + e.error; };
+    rec.onend = () => { micState(false); if ($('msg').value.trim()) $('composer').requestSubmit(); };
+    rec.onerror = (e) => { micState(false); if (e.error !== 'aborted' && e.error !== 'no-speech') $('msg').placeholder = 'Mic error: ' + e.error; };
   }
   $('empty').addEventListener('click', (e) => { const c = e.target.closest('.chip'); if (c) { $('msg').value = c.dataset.text; $('msg').focus(); } });
   $('chips').addEventListener('click', (e) => {
@@ -599,7 +629,7 @@
       window.renderPlan(s.plan || [], s.brief, s.question);
       if (s.score && s.score.vector) renderScore({ ...s.score, previous: null, lineage: s.lineage || [] });
       for (const m of s.transcript || []) {
-        addMsg(m.role === 'user' ? 'user' : 'agent', m.role === 'user' ? esc(m.text) : `<div class="meta">Ideator</div><div class="body md">${md(m.text)}</div>`);
+        addMsg(m.role === 'user' ? 'user' : 'agent', m.role === 'user' ? esc(m.text) : `<div class="meta">Ideator</div><div class="body md">${md(m.text)}</div><div class="agent-actions"><button type="button" class="btn-tts ghost">Listen</button></div>`);
       }
       if (!(s.transcript || []).length && (s.lineage || []).length) {
         addMsg('agent', `<div class="meta">Restored from graph</div><div class="body">Session has ${s.lineage.length} idea version${s.lineage.length > 1 ? 's' : ''}. Continue refining, or start a new session.</div>`);

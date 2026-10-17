@@ -335,3 +335,10 @@ body.resizing { cursor: col-resize; user-select: none; }
 @keyframes bob { 50% { transform: translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .m-eyes, .mascot.talking svg { animation: none; } }
 @media (max-width: 860px) { .mascot { bottom: 60px; } }
+
+.mic { display: grid; place-items: center; width: 44px; border: 1px solid var(--line); background: none; color: var(--ink); }
+.mic svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.mic:hover { border-color: var(--muted); }
+.mic.on { background: var(--grievance); border-color: var(--grievance); color: #fff; }
+.btn-tts.playing { border-color: var(--accent); color: var(--accent); }
+.agent-actions { margin-top: 10px; display: flex; gap: 8px; }
