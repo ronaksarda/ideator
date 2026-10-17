@@ -32,7 +32,7 @@
           <h1>Ideator</h1>
           <div class="account">
             <label for="sessions-select" class="sr-only">Past sessions</label><select id="sessions-select" class="session-select" title="Open a past idea session"><option value="">Past sessions…</option></select>
-            <button id="download" class="ghost" type="button">Download transcript</button>
+            <button id="download" class="ghost" type="button">Export</button>
             <button id="theme" class="ghost" type="button" aria-label="Switch light or dark theme">Theme</button>
             <button id="new-session" class="ghost" type="button">New session</button>
             <span id="user" class="user" hidden><img id="avatar" alt="" width="22" height="22"><span id="user-name"></span></span>
@@ -56,10 +56,21 @@
 
       <section class="feed" id="feed" aria-live="polite">
         <div class="empty" id="empty">
-          <p>Start with the product you want to build, for example
-            <em>“Cloud logging and observability tool”</em>.</p>
-          <p class="muted small">Your first message looks up competitors and what users hate about them. After that, describe changes
-            and see if the market gets less crowded. Start with <code>new idea:</code> to look up a different market.</p>
+          <h2 class="empty-title">What do you want to build?</h2>
+          <p>Describe it in one line. Ideator finds the real competitors, what they charge and what their users complain
+            about, then helps you decide five things: who pays, the pain you fix, why you win, the price and version 1.</p>
+          <ol class="empty-steps">
+            <li><b>Research.</b> Live search, mapped into a graph you can explore.</li>
+            <li><b>Decide.</b> One question per turn, each with a suggestion from the evidence.</li>
+            <li><b>Build.</b> A locked plan with a build order, ready to export.</li>
+          </ol>
+          <p class="muted small">Try one:</p>
+          <div class="examples">
+            <button type="button" class="chip" data-text="Budget meal planner for college students who share a kitchen">Meal planner for roommates</button>
+            <button type="button" class="chip" data-text="Cloud logging tool that caps the monthly bill for small DevOps teams">Cost-capped logging</button>
+            <button type="button" class="chip" data-text="Habit tracker for remote software teams that runs inside Slack">Team habit tracker</button>
+          </div>
+          <p class="muted small">Later, start a message with <code>new idea:</code> to research a different market.</p>
         </div>
       </section>
 
@@ -82,6 +93,15 @@
       </div>
       <div id="plan" class="plan" role="tabpanel" aria-labelledby="tab-plan" hidden></div>
       <div id="cy" class="cy" role="img" aria-label="Market graph. Select a node to inspect it."></div>
+      <p id="map-step" class="map-step" aria-live="polite" hidden></p>
+      <div class="mascot" id="mascot" aria-hidden="true">
+        <p class="mascot-say" id="mascot-say" hidden></p>
+        <svg viewBox="0 0 64 44" width="80" height="55">
+          <path class="m-body" d="M16 40 h34 a10 10 0 0 0 1 -20 a14 14 0 0 0 -27 -4 a11 11 0 0 0 -8 24 z"/>
+          <g class="m-eyes"><line x1="27" y1="25" x2="27" y2="30"/><line x1="38" y1="25" x2="38" y2="30"/></g>
+          <ellipse class="m-cheek" cx="22.5" cy="32" rx="3" ry="1.6"/><ellipse class="m-cheek" cx="42.5" cy="32" rx="3" ry="1.6"/>
+        </svg>
+      </div>
       <div class="graph-empty" id="graph-empty">Your market map shows up here after your first message.</div>
       <ul class="legend" aria-label="Legend">
         <li><i class="sw idea"></i>Idea version</li>
@@ -101,6 +121,18 @@
       </aside>
     </section>
   </main>
+  <nav class="viewbar" aria-label="Switch view">
+    <button type="button" data-view="chat" aria-pressed="true">Chat</button>
+    <button type="button" data-view="map" aria-pressed="false">Map</button>
+    <button type="button" data-view="plan" aria-pressed="false">Plan</button>
+  </nav>
+  <dialog id="export" class="export" aria-labelledby="export-title">
+    <header><h2 id="export-title">Session as Markdown</h2><button type="button" class="ghost" id="export-close">Close</button></header>
+    <textarea id="export-text" readonly aria-label="Session transcript in Markdown"></textarea>
+    <footer><span id="export-note" class="muted small" aria-live="polite"></span>
+      <button type="button" class="ghost" id="export-copy">Copy</button>
+      <button type="button" class="primary" id="export-save">Download .md</button></footer>
+  </dialog>
   <script src="/static/chat.js"></script>
 </body>
 </html>

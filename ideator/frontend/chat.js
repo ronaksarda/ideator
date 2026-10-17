@@ -29,7 +29,8 @@
       { selector: 'node[type = "grievance"]', style: { 'background-color': css('--grievance') } },
       { selector: 'node[type = "pricing"]', style: { 'background-color': css('--pricing'), 'shape': 'diamond' } },
       { selector: 'node[type = "decision"]', style: { 'background-color': '#a855f7', 'shape': 'star', 'width': 28, 'height': 28, 'font-weight': 600 } },
-      { selector: 'node.evidence', style: { 'border-width': 4, 'border-color': '#a855f7' } },
+      { selector: 'node.evidence', style: { 'border-width': 4, 'border-color': css('--accent') } },
+      { selector: 'edge.evidence', style: { 'width': 3.5, 'line-color': css('--accent'), 'target-arrow-color': css('--accent'), 'z-index': 9 } },
       { selector: 'node.solved', style: { 'background-color': css('--solved') } },
       { selector: 'node.superseded', style: { 'opacity': 0.35 } },
       { selector: 'node:selected', style: { 'border-width': 3, 'border-color': css('--accent') } },
@@ -51,7 +52,6 @@
   ];
   const cy = cytoscape({
     container: $('cy'),
-    wheelSensitivity: 0.3,
     style: graphStyle(),
   });
 
@@ -218,6 +218,8 @@
     const summary = done ? [b.mvp ? `Build ${lc(b.mvp)}` : 'Build a first version', b.who ? ` for ${lc(b.who)}.` : '.', b.price ? ` Charge ${b.price}.` : '',
       b.edge ? ` You win because: ${b.edge}.` : '', b.pain ? ` It fixes: ${b.pain}.` : ''].join('').replace(/\.\./g, '.') : '';
     const locked = done === 5;
+    if (locked) say('Plan locked. Go build it!');
+    else if (done) say(done === 1 ? 'One decision down. Four to go.' : `${done} of 5 decided. One question at a time.`);
     if (locked && !document.body.classList.contains('locked')) {  // the moment the plan is decided: mark it once
       document.body.classList.add('locked', 'sunrise');
       setTimeout(() => document.body.classList.remove('sunrise'), 2400);
@@ -255,6 +257,23 @@
     $('tab-map').setAttribute('aria-selected', t === 'map'); $('tab-plan').setAttribute('aria-selected', t === 'plan');
     $('plan').hidden = t !== 'plan';
   }
+  // Mascot: a little cloud that says what is happening. Decoration only; the same news is in the chat.
+  let sayTimer;
+  function say(text) {
+    const b = $('mascot-say'); if (!b) return;
+    b.textContent = text; b.hidden = false; $('mascot').classList.add('talking');
+    clearTimeout(sayTimer);
+    sayTimer = setTimeout(() => { b.hidden = true; $('mascot').classList.remove('talking'); }, 6000);
+  }
+  setTimeout(() => { if (!cy.nodes().length) say('Hi! Tell me what you want to build.'); }, 900);
+  // Narrow screens show one full-height view at a time instead of one long page with the map at the bottom.
+  function setView(v) {
+    document.body.dataset.view = v;
+    document.querySelectorAll('.viewbar button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.view === v));
+    if (v !== 'chat') { showTab(v); requestAnimationFrame(() => { cy.resize(); if (v === 'map' && cy.nodes().length) cy.fit(undefined, 30); }); }
+  }
+  document.querySelector('.viewbar').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setView(b.dataset.view); });
+  document.body.dataset.view = 'chat';
   $('tab-map').addEventListener('click', () => showTab('map'));
   $('tab-plan').addEventListener('click', () => showTab('plan'));
   window.renderPlan([]);
@@ -329,6 +348,7 @@
   async function send(text) {
     const btn = $('send');
     btn.disabled = true;
+    say('Off to read the market. Watch the map light up.');
     addMsg('user', esc(text));
     const agent = addMsg('agent', '<div class="meta">Working…</div><div class="body"></div>');
     let cypher = [];
@@ -368,8 +388,14 @@
             trace.insertAdjacentHTML('beforeend', `<li>${esc(said)}`
               + (DEBUG ? `<div class="muted small"><code>${esc(ev.tool)} ${esc(JSON.stringify(ev.args || {}))}</code> ${ev.ms ?? ''} ms. ${esc(ev.thought || '')}</div>`
                 + (ev.cypher ? `<details><summary>Cypher</summary><pre>${esc(ev.cypher)}</pre></details>` : '') : '') + '</li>');
-            cy.nodes('.evidence').removeClass('evidence');
-            for (const id of ev.node_ids || []) cy.getElementById(id).addClass('evidence');
+            // Walk the map with the agent: light up the nodes this query touched and the edges between them.
+            cy.elements('.evidence').removeClass('evidence');
+            const hit = new Set(ev.node_ids || []);
+            const walked = cy.nodes().filter((n) => hit.has(n.id()));
+            const path = walked.union(walked.edgesWith(walked));
+            path.addClass('evidence');
+            $('map-step').textContent = `Step ${ev.step}: ${said}`; $('map-step').hidden = false;
+            if (walked.length) cy.animate({ fit: { eles: path, padding: 70 } }, { duration: reducedMotion ? 0 : 600 });
             agent.querySelector('.meta').textContent = `Analyzing the market graph (step ${ev.step})…`;
           }
           else if (ev.type === 'plan') window.renderPlan(ev.items, ev.brief, ev.question);
@@ -393,9 +419,9 @@
       // Action buttons: Reasoning Path & Voice Narration
       let actionsHtml = '<div class="agent-actions" style="margin-top: 10px; display: flex; gap: 8px;">';
       if (agent.dataset.reasoningNodes) {
-        actionsHtml += `<button type="button" class="btn-reasoning" style="background: rgba(139, 92, 246, 0.18); border: 1px solid var(--accent); color: var(--accent); padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 600;">Show evidence on graph</button>`;
+        actionsHtml += `<button type="button" class="btn-reasoning ghost">Show evidence on map</button>`;
       }
-      actionsHtml += `<button type="button" class="btn-tts" style="background: rgba(59, 130, 246, 0.15); border: 1px solid var(--ink); color: var(--ink); padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 500;">Play Voice (ElevenLabs)</button>`;
+      actionsHtml += `<button type="button" class="btn-tts ghost">Listen</button>`;
       actionsHtml += '</div>';
       agent.insertAdjacentHTML('beforeend', actionsHtml);
 
@@ -417,10 +443,11 @@
               if (el.length) targetEles.merge(el);
             }
             if (targetEles.length) {
+              setView('map'); showTab('map');
               targetEles.select();
               cy.animate({ fit: { eles: targetEles, padding: 60 } }, { duration: 500 });
-              rBtn.textContent = 'Reasoning Path Highlighted';
-              setTimeout(() => { rBtn.textContent = 'Show evidence on graph'; }, 3000);
+              rBtn.textContent = 'Shown on the map';
+              setTimeout(() => { rBtn.textContent = 'Show evidence on map'; }, 3000);
             }
           } catch (_) {}
         });
@@ -431,7 +458,7 @@
       if (ttsBtn) {
         ttsBtn.addEventListener('click', async () => {
           ttsBtn.disabled = true;
-          ttsBtn.textContent = 'Synthesizing Voice…';
+          ttsBtn.textContent = 'Loading voice…';
           try {
             const rawText = agent.dataset.fullText || agent.querySelector('.body').textContent || '';
             const cleanSpeech = rawText.replace(/[*#`•]/g, '').slice(0, 400);
@@ -446,10 +473,10 @@
             const audio = new Audio(audioUrl);
             audio.play();
             ttsBtn.textContent = 'Playing…';
-            audio.onended = () => { ttsBtn.textContent = 'Play Voice (ElevenLabs)'; ttsBtn.disabled = false; };
+            audio.onended = () => { ttsBtn.textContent = 'Listen'; ttsBtn.disabled = false; };
           } catch (e) {
-            ttsBtn.textContent = 'Voice Unavailable (Add ELEVENLABS_API_KEY)';
-            setTimeout(() => { ttsBtn.textContent = 'Play Voice (ElevenLabs)'; ttsBtn.disabled = false; }, 3500);
+            ttsBtn.textContent = 'Voice unavailable right now';
+            setTimeout(() => { ttsBtn.textContent = 'Listen'; ttsBtn.disabled = false; }, 3500);
           }
         });
       }
@@ -488,6 +515,7 @@
     rec.onend = () => { $('mic').textContent = 'Mic'; if ($('msg').value.trim()) $('composer').requestSubmit(); };
     rec.onerror = (e) => { $('mic').textContent = 'Mic'; $('msg').placeholder = 'Mic error: ' + e.error; };
   }
+  $('empty').addEventListener('click', (e) => { const c = e.target.closest('.chip'); if (c) { $('msg').value = c.dataset.text; $('msg').focus(); } });
   $('chips').addEventListener('click', (e) => {
     const c = e.target.closest('.chip'); if (!c) return;
     $('msg').value = c.dataset.text; $('msg').focus();
@@ -498,23 +526,35 @@
     try { localStorage.setItem(KEY, sessionId); } catch (_) {}
     cy.elements().remove();
     feed.querySelectorAll('.msg').forEach((m) => m.remove());
-    $('empty').hidden = false; $('graph-empty').hidden = false; $('inspector').hidden = true;
+    $('empty').hidden = false; $('graph-empty').hidden = false; $('inspector').hidden = true; $('map-step').hidden = true;
     $('lineage').innerHTML = ''; $('sat-value').textContent = '–'; $('sat-fill').style.width = '0';
     $('sat-delta').textContent = ''; $('sat-meta').textContent = 'Describe an idea to score its market.';
     $('send').disabled = false;
     if ($('sessions-select')) $('sessions-select').value = '';
     if (window.renderPlan) window.renderPlan(null);
   }
+  // Export: show the Markdown first, so it works even where the browser blocks file downloads (embedded panes).
   $('download').addEventListener('click', async () => {
     const res = await fetch(`/api/session/${encodeURIComponent(sessionId)}/transcript`);
-    if (!res.ok) { addMsg('agent', '<div class="meta">Download</div><div class="body">Nothing to download yet. Send a message first.</div>'); return; }
+    if (!res.ok) { addMsg('agent', '<div class="meta">Export</div><div class="body">Nothing to export yet. Send your idea first.</div>'); return; }
+    $('export-text').value = await res.text();
+    $('export-note').textContent = '';
+    $('export').showModal();
+  });
+  $('export-close').addEventListener('click', () => $('export').close());
+  $('export-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('export-text').value); $('export-note').textContent = 'Copied.'; }
+    catch (_) { $('export-text').select(); $('export-note').textContent = 'Press Ctrl+C to copy the selected text.'; }
+  });
+  $('export-save').addEventListener('click', () => {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(await res.blob());
+    a.href = URL.createObjectURL(new Blob([$('export-text').value], { type: 'text/markdown' }));
     a.download = `ideator-${sessionId.slice(0, 8)}.md`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    $('export-note').textContent = 'Saved to your downloads. If nothing appeared, use Copy.';
   });
-  $('new-session').addEventListener('click', () => { resetView(newId()); $('msg').focus(); });
+  $('new-session').addEventListener('click', () => { resetView(newId()); setView('chat'); $('msg').focus(); });
   // Theme: system default, or the viewer's saved choice.
   const applyTheme = (t) => {
     if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;

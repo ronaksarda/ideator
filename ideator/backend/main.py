@@ -628,7 +628,7 @@ def _plan_event(sess: Dict[str, Any]) -> str:
 
 
 async def _graph_agent(sess: Dict[str, Any], user_graph: MarketGraph, goal: str, actions: bool = True) -> AsyncGenerator[str, None]:
-    """Track 01 agent: Gemma picks MCP graph tools step by step; every step streams with the Cypher it really ran."""
+    """Graph agent: Gemma picks MCP graph tools step by step; every step streams with the Cypher it really ran."""
     idea_raw, idea_text = sess["lineage"][0]["id"], sess.get("memory", {}).get("idea", "")
     server = build_server(user_graph, idea_raw, idea_text, search_market, actions=actions)
     q: asyncio.Queue = asyncio.Queue()

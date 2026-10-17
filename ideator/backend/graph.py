@@ -760,7 +760,7 @@ ORDER BY complaint_count DESC, avg_pricing_usd DESC"""
     def get_reasoning_path(self, idea_id: str, feature_name: Optional[str] = None) -> Dict[str, Any]:
         """
         Extract the exact reasoning path (subgraph nodes & edges) that proves why a wedge was chosen.
-        Used for Track 01 explainable graph reasoning visualization.
+        Used for explainable graph reasoning visualization.
         """
         u_id = entity_id("idea", idea_id)
         path_nodes: List[str] = [u_id]
@@ -922,7 +922,7 @@ ORDER BY complaint_count DESC, avg_pricing_usd DESC"""
     # Track 03: Company Brain (Connecting People, Teams, Docs, Tickets & Decisions)
     def run_pagerank_ranking(self, idea_id: str) -> List[Dict[str, Any]]:
         """
-        Track 01: Graph algorithm tool - Compute PageRank centrality of competitors
+        Graph algorithm tool: Compute PageRank centrality of competitors
         based on grievance in-degree and feature dominance.
         """
         u_id = entity_id("idea", idea_id) if not idea_id.startswith("idea_") else idea_id

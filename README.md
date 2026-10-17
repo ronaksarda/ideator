@@ -5,10 +5,6 @@ with a similar product, what they offer and charge, and what their users complai
 FalkorDB graph. A Gemma-powered agent then works through the graph with MCP tools, decides where the opening is,
 and saves that decision in the graph, linked to the evidence behind it.
 
-Built for **Graph Hacks: Context for AI Agents** (WeMakeDevs × FalkorDB, Oct 15–18 2026).
-
-**Track:** Track 01, Agents That Act on Connected Data.
-
 Demo video: _add link_ · Live deployment: _add link, or use the local setup below_
 
 ---

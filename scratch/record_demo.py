@@ -1,5 +1,5 @@
 """Records the demo video against the running app (http://127.0.0.1:8000): three turns of one idea, from first
-search to a finished build brief, then the Temporal UI. Waits are sped up afterwards with ffmpeg.
+search to a locked plan, shown in light and dark. Waits are sped up afterwards with ffmpeg.
 Usage: python scratch/record_demo.py  ->  demo/ideator-demo.mp4"""
 import json
 import shutil
@@ -19,7 +19,7 @@ T0 = time.time()
 CAPTION_JS = """(t) => {
   let el = document.getElementById('demo-cap');
   if (!el) { el = document.createElement('div'); el.id = 'demo-cap';
-    el.style.cssText = 'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:99999;max-width:80%;'
+    el.style.cssText = 'position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:99999;max-width:80%;'
       + 'background:rgba(10,10,20,.88);color:#fff;font:600 20px/1.4 system-ui,sans-serif;padding:12px 22px;border-radius:12px;'
       + 'box-shadow:0 6px 30px rgba(0,0,0,.4);text-align:center;pointer-events:none';
     document.body.appendChild(el); }
@@ -41,7 +41,7 @@ def wait_turn(page, label: str) -> None:
     """Wait for the agent to finish a turn; that stretch plays fast in the final video."""
     start = now()
     page.wait_for_function("() => !document.getElementById('send').disabled", timeout=600_000, polling=1000)
-    segments.append((start, now(), 40.0))
+    segments.append((start, now(), 12.0))
     print(f"{label}: {now() - start:.0f}s", flush=True)
     page.wait_for_timeout(1500)
 
@@ -79,48 +79,49 @@ def main() -> None:
         page.wait_for_timeout(1500)
         if page.is_visible("#new-session"):
             page.click("#new-session")
-        cap(page, "Ideator: check a startup idea against the real market, and leave with a plan you can build.", 3)
+        cap(page, "Ideator: from a one-line idea to a plan you can build.", 3)
 
-        # ---- turn 1 ----
+        # ---- turn 1: research, with the map visible so the graph walk shows ----
         send(page, IDEA)
-        cap(page, "Turn 1 (sped up): SerpApi searches Google, Google Play and Reddit. Results go into FalkorDB. "
-                  "Gemma then picks graph tools over MCP, step by step.", 0)
+        cap(page, "Live search fills a graph: your idea, real competitors and prices, their features, what users say. "
+                  "Watch the map: each agent step lights up the part of the graph it queried.", 0)
         wait_turn(page, "turn 1")
-        page.evaluate("() => { const t = document.querySelector('.msg .trace'); if (t) t.scrollIntoView({behavior: 'smooth'}); }")
-        cap(page, "Each step ran real Cypher on this session's graph. TabPFN priced it from stored competitors.", 3.5)
-        show_last_reply(page, [(0.3, "Report: real competitors and prices. Every user quote links to its source."),
-                               (1.0, "It ends with a build brief: 5 decisions. Evidence fills 2; you make the rest.")])
-        page.click("#tab-map")
-        cap(page, "Market map, read back from FalkorDB: idea, companies with price, features, what users say.", 3.5)
+        show_last_reply(page, [(0.25, "The report: real competitors and prices. Every user quote links to its source."),
+                               (1.0, "It ends with five decisions. The evidence settles two; you make the rest.")])
         page.click("#tab-plan")
-        cap(page, "Action plan: your plan in one paragraph, the brief, then the build order.", 4)
+        card = page.locator(".plan-card:not(.brief)").first
+        if card.count():
+            card.click()  # jumps to that feature on the map and opens its explanation
+            cap(page, "Click any opening: the map jumps to it and explains it with the evidence.", 3.5)
+            page.click("#insp-close")
 
-        # ---- turns 2+: answer the one open question until the brief is complete ----
+        # ---- switch theme: both are first-class ----
+        page.click("#theme")
+        cap(page, "Light and dark themes.", 2.5)
+        page.click("#tab-plan")
+        cap(page, "Action plan: the plan so far, then the build order.", 3.5)
+
+        # ---- turns 2+: answer the one open question until the plan locks ----
         for turn in (2, 3, 4, 5):
-            done = page.evaluate("() => [...document.querySelectorAll('.plan-card.brief h3')].map(h => h.textContent).join(' ')")
-            if "5/5" in done or not page.locator(".chip-next").count():
+            done = page.evaluate("() => [...document.querySelectorAll('.plan-card.brief .brief-kicker')].map(h => h.textContent).join(' ')")
+            if "locked" in done.lower() or not page.locator(".chip-next").count():
                 break
             cap(page, f"Turn {turn}: one click answers the open question.", 1.5)
             page.locator(".chip-next").click()
             page.fill("#msg", page.input_value("#msg") + "Yes, go with your suggestion.")
             page.wait_for_timeout(1000)
             page.click("#send")
-            cap(page, f"Turn {turn} (sped up): the agent checks the answer against the graph and records a decision.", 0)
+            page.click("#tab-map")
+            cap(page, f"Turn {turn}: the agent checks the answer against the graph and saves a decision linked to its evidence.", 0)
             wait_turn(page, f"turn {turn}")
             page.click("#tab-plan")
             cap(page, "The plan fills up. Decided slots stay decided.", 2.5)
-        cap(page, "Plan locked: who pays, the pain, the edge, the price and version 1, plus a build order.", 4.5)
-
-        # ---- Temporal ----
-        try:
-            page.goto("http://localhost:8233/namespaces/default/workflows", timeout=15_000)
-            page.wait_for_timeout(1500)
-            cap(page, "Temporal: search and report run as retried, durable workflows.", 3)
-        except Exception as e:
-            print("Temporal UI not reachable:", e)
-        page.goto(f"{BASE}/")
+        cap(page, "Plan locked: who pays, the pain, the edge, the price and version 1, with a build order.", 4.5)
+        page.click("#download")
         page.wait_for_timeout(800)
-        cap(page, "Ideator. FalkorDB + Gemma + MCP + TabPFN. Graph Hacks Track 01: Agents That Act on Connected Data.", 3)
+        cap(page, "Export the whole session as Markdown.", 3)
+        page.click("#export-close")
+        cap(page, "Ideator. Know what to build before you build it.", 3)
         video = page.video.path()
         ctx.close()
         browser.close()

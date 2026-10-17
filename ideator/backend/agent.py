@@ -200,10 +200,10 @@ class StrategistAgent:
             # 1. Multi-hop unserved wedge traversal
             wedge_data, meta = self.graph.query_unserved_wedge_with_meta(idea_id)
         
-        # 2. Graph Algorithm: Competitor PageRank & Centrality (Track 01)
+        # 2. Graph Algorithm: Competitor PageRank & Centrality
         pagerank_results = self.graph.compute_competitor_pagerank(idea_id)
         
-        # 3. Graph Algorithm: Community Detection & Gap Clustering (Track 01)
+        # 3. Graph Algorithm: Community Detection & Gap Clustering
         market_gaps = self.graph.detect_market_gaps(idea_id)
         
         # 4. Top wedge and dominant incumbent identification
@@ -214,7 +214,7 @@ class StrategistAgent:
         }
         feature_name = top_wedge.get("feature", "Core Engine")
         
-        # 5. Extract exact reasoning path proof (Track 01: explainable results)
+        # 5. Extract exact reasoning path proof
         reasoning_path = self.graph.get_reasoning_path(idea_id, feature_name)
         
         # 6. Pricing and saturation metrics

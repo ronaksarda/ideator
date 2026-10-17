@@ -1,4 +1,4 @@
-"""Track 01: graph tools served over MCP, and an agent that picks them, acts on the graph, and explains itself.
+"""Graph tools served over MCP, and an agent that picks them, acts on the graph, and explains itself.
 
 Every tool runs real, parameterized Cypher (or a FalkorDB algorithm) against the user's own graph and returns
 the query it ran plus the node ids it touched, so the UI can highlight the evidence.
