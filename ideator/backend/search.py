@@ -57,6 +57,18 @@ def _topic(text: str) -> str:
     return next((name for name, keys in TOPICS if any(k in low for k in keys)), "General feedback")
 
 
+_GENERIC = {"tool", "app", "apps", "that", "with", "for", "the", "and", "small", "team", "teams", "monthly", "best", "free",
+            "new", "make", "your", "from", "into", "online", "software", "platform", "simple", "easy", "using"}
+
+
+def _relevant(text: str, idea_text: str) -> bool:
+    """True when a search result talks about this idea. Drops off-topic hits (sports threads, site homepages) before they reach the graph."""
+    words = {w for w in re.sub(r"[^\w\s]", " ", idea_text.lower()).split() if len(w) > 3 and w not in _GENERIC}
+    low = text.lower()
+    hits = sum(1 for w in words if w[:5] in low)
+    return hits >= min(2, len(words))  # shortcut: prefix match, no stemming; upgrade to embeddings if recall drops
+
+
 def _llm_market(idea_text: str, evidence: str = "") -> Optional[Dict[str, Any]]:
     """Ask Gemini for real competitors + user complaints. With `evidence` (SerpApi snippets) it must stay grounded in them."""
     api_key = os.getenv("GEMINI_API_KEY") or settings.gemini_api_key
@@ -239,9 +251,12 @@ def search_market(idea_text: str) -> Dict[str, Any]:
                                for q in (comp_query, complaint_query))
             # Google Play search gives real product names + ratings instead of listicle titles.
             play_f = pool.submit(lambda: GoogleSearch({"engine": "google_play", "store": "apps", "q": idea_text, "api_key": api_key}).get_dict())
-            comp_results = comp_f.result().get("organic_results", [])
-            complaint_results = griev_f.result().get("organic_results", [])
-            play_items = [it for sec in play_f.result().get("organic_results", []) for it in sec.get("items", [])][:5]
+            comp_results = [r for r in comp_f.result().get("organic_results", [])
+                            if _relevant(f"{r.get('title', '')} {r.get('snippet', '')}", idea_text)]
+            complaint_results = [r for r in griev_f.result().get("organic_results", [])
+                                 if _relevant(f"{r.get('title', '')} {r.get('snippet', '')}", idea_text)]
+            play_items = [it for sec in play_f.result().get("organic_results", []) for it in sec.get("items", [])
+                          if _relevant(f"{it.get('title', '')} {it.get('description', '')}", idea_text)][:5]
 
         competitors: List[Dict[str, Any]] = []
         for it in play_items:

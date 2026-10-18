@@ -233,7 +233,7 @@ python -m pytest -q
 - **Prompt injection:** user text goes into prompts inside `<user_input>` tags, with a rule that it is data, not
   instructions. The agent can only call the tools on its own MCP server, and those tools are bound to that user's
   graph. Unknown tool names are refused.
-- **Output:** model output is rendered with marked and sanitized with DOMPurify. All Cypher uses parameters.
+- **Output:** model output is rendered with marked and sanitized with DOMPurify. Every query the app runs against FalkorDB uses parameters. The one exception is the "write the graph" text shown for display, which is a readable copy, not what runs.
 
 ---
 

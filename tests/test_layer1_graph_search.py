@@ -85,3 +85,11 @@ def test_graph_ingestion_and_wedge_traversal():
     assert "TARGETS" in edge_labels
     assert "DRAWS_COMPLAINT" in edge_labels
     assert "TARGETS_FEATURE" in edge_labels
+
+
+def test_relevant_drops_off_topic_results():
+    from ideator.backend.search import _relevant
+    idea = "Cloud logging tool that caps the monthly bill for small DevOps teams"
+    assert _relevant("Cloud logging costs: how to cap your DevOps bill", idea)
+    assert not _relevant("NFL: National Football League Discussion", idea)
+    assert not _relevant("Reddit Inc Homepage. Reddit is home to thousands of communities", idea)
