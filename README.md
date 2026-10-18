@@ -5,7 +5,7 @@ with a similar product, what they offer and charge, and what their users complai
 FalkorDB graph. A Gemma-powered agent then works through the graph with MCP tools, decides where the opening is,
 and saves that decision in the graph, linked to the evidence behind it.
 
-Demo video: _add link_ · Live deployment: _add link, or use the local setup below_
+Demo video: [Ideator](https://youtu.be/BAruAQ9rAyY) 
 
 ---
 
@@ -251,5 +251,5 @@ python -m pytest -q
 
 ## AI assistance disclosure
 
-This project was built with AI coding assistants, including Claude Code. The team reviewed, ran and tested
+This project was built with AI coding assistants, including Claude Code and Google Antigravity. I reviewed, ran and tested
 the code, and can explain the graph model, the queries and the architecture.
