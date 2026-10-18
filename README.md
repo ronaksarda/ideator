@@ -251,5 +251,5 @@ python -m pytest -q
 
 ## AI assistance disclosure
 
-This project was built with AI coding assistants, including Claude Code. The team reviewed, ran and tested
+This project was built with AI coding assistants, including Claude Code and Google Antigravity. I reviewed, ran and tested
 the code, and can explain the graph model, the queries and the architecture.
