@@ -40,6 +40,34 @@ def test_agent_runs_tools_over_mcp_and_records_decision(graph):
     assert len(steps) == len(out["steps"])
 
 
+def test_hotspots_ignore_other_ideas_solves(graph):
+    """A grievance solved by a different idea must still show up for this one."""
+    graph.insert_market_nodes("idea_t", "Meal planner", COMPS, CMPS)
+    graph._graph.query("""
+MATCH (c:Competitor {name: 'PlateJoy'})-[:DRAWS_COMPLAINT]->(g:Grievance)
+MERGE (other:UserIdea {id: 'other_idea'}) MERGE (other)-[:TARGETS]->(c) MERGE (other)-[:SOLVES]->(g)""")
+    server = build_server(graph, "idea_t", "Meal planner")
+    hot = asyncio.run(run_graph_agent(server, "x", lambda p: None, lambda s: None))
+    rows = next(s for s in hot["steps"] if s["tool"] == "complaint_hotspots")["result"]["rows"]
+    assert rows[0]["feature"] == "Grocery lists" and rows[0]["complaints"] == 2
+    # the same idea solving it does hide it
+    graph._graph.query("""
+MATCH (u:UserIdea {id: $u}), (g:Grievance)<-[:DRAWS_COMPLAINT]-(:Competitor {name: 'PlateJoy'}) MERGE (u)-[:SOLVES]->(g)""",
+                       {"u": next(iter(graph._graph.query("MATCH (u:UserIdea) WHERE u.id <> 'other_idea' RETURN u.id").result_set))[0]})
+    out = asyncio.run(run_graph_agent(server, "x", lambda p: None, lambda s: None))
+    rows = next(s for s in out["steps"] if s["tool"] == "complaint_hotspots")["result"]["rows"]
+    assert rows[0]["complaints"] == 1
+
+
+def test_unknown_price_is_not_free():
+    from ideator.backend.graph import MarketGraph
+    g = MarketGraph()
+    g.insert_market_nodes("idea_p", "x", [{"name": "A", "price_usd": None, "features": []},
+                                          {"name": "B", "price_usd": 0.0, "features": []}], [])
+    amounts = [n["amount_usd"] for n in g._mem_nodes.values() if n.get("type") == "pricing"]
+    assert amounts == [0.0]  # B is free (has a Pricing node), A is unknown (none)
+
+
 def test_agent_rejects_unknown_tool(graph):
     graph.insert_market_nodes("idea_t", "Meal planner", COMPS, CMPS)
     picks = iter([{"tool": "drop_database", "args": {}}, {"final": "done", "cited_ids": []}])

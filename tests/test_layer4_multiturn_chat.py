@@ -88,7 +88,7 @@ def test_question_reads_graph_without_new_version(client, session):
     assert "graph_delta" not in q
     assert len(calls) == 1
     assert [v["version"] for v in q["score"]["lineage"]] == [1, 2]
-    assert "$" in q["message"]["text"]
+    assert "No competitor price found" in q["message"]["text"]  # fallback competitors have unknown prices: never shown as $0 or made up
 
 
 def test_revert_branches_from_parent_and_supersedes_head(client, session):

@@ -72,7 +72,7 @@ ORDER BY count(DISTINCT g) DESC""", {}, ["competitor_id", "name", "price_usd", "
         skipping complaints the idea already SOLVES. The top row is the most painful unserved need."""
         return run("""
 MATCH (u:UserIdea {id: $idea})-[:TARGETS]->(c:Competitor)-[:DRAWS_COMPLAINT]->(g:Grievance)-[:TARGETS_FEATURE]->(f:Feature)
-WHERE NOT (:UserIdea)-[:SOLVES]->(g)
+WHERE NOT (u)-[:SOLVES]->(g)
 RETURN f.id, f.name, count(DISTINCT g), collect(DISTINCT c.name), collect(g.text)[0..3], collect(g.id)
 ORDER BY count(DISTINCT g) DESC""", {}, ["feature_id", "feature", "complaints", "competitors", "quotes", "grievance_ids"])
 
@@ -115,7 +115,7 @@ RETURN c.id, c.name, g.id, g.text, g.url, f.id""", {"feature": feature},
         predicts the monthly price paid products charge with this many features and fixed complaints, plus the share of free apps."""
         if not (graph.is_live and graph._falkor):
             return {"error": "FalkorDB offline", "rows": []}
-        cypher = "MATCH (s:Sample) RETURN s.n_features, s.n_complaints, s.price"  # free apps (0) are real market data too
+        cypher = "MATCH (s:Sample) WHERE s.price IS NOT NULL RETURN s.n_features, s.n_complaints, s.price"  # free (0) is real data; unknown is not
         data = graph._falkor.select_graph("market_history").query(cypher).result_set
         if len(data) < 5:
             return {"error": f"only {len(data)} competitors in history; need 5", "cypher": cypher, "rows": []}
@@ -146,7 +146,7 @@ RETURN c.id, c.name, g.id, g.text, g.url, f.id""", {"feature": feature},
 
     @server.tool()
     def saturation_score() -> Dict[str, Any]:
-        """TabPFN model: how crowded the market is (0-100) and a suggested entry price, from live graph counts."""
+        """EXPERIMENTAL, unvalidated heuristic: how crowded the market is (0-100) and a suggested entry price, from live graph counts."""
         stats = run("""
 MATCH (u:UserIdea {id: $idea})-[:TARGETS]->(c:Competitor) WHERE c.name <> $general
 OPTIONAL MATCH (c)-[:PRICED_AT]->(p:Pricing)
@@ -155,7 +155,7 @@ RETURN count(DISTINCT c), avg(p.amount_usd), count(DISTINCT g)""", {}, ["competi
         if stats.get("error") or not stats["rows"]:
             return stats
         r = stats["rows"][0]
-        stats["tabpfn"] = evaluate_market_saturation(competitor_count=r["competitors"], median_price_usd=float(r["avg_price"] or 0),
+        stats["tabpfn"] = evaluate_market_saturation(competitor_count=r["competitors"], median_price_usd=None if r["avg_price"] is None else float(r["avg_price"]),
                                                      complaint_count=r["complaints"], has_open_source=1, review_volume=250)
         return stats
 

@@ -245,9 +245,12 @@ python -m pytest -q
   from the search data. The UI says so.
 - Some complaints don't name a specific company. They are stored under "General user feedback" and drawn off the
   feature they are about, or off the idea itself.
-- `saturation_score` trains its TabPFN classifier on 4 hand-made rows; treat it as a rough signal. `predict_price`
-  is the real TabPFN use: it trains on every competitor stored in FalkorDB.
-- Companies with no listed price show as "Free".
+- `saturation_score` trains its TabPFN classifier on 4 hand-made rows (or a hand-set heuristic) and was never
+  evaluated on labeled markets. Its output is marked experimental and is not a validated prediction. `predict_price`
+  trains on every competitor stored in FalkorDB, but its error has not been measured against a median baseline yet.
+- Prices have three states: known, free (0) and unknown (no price found). Unknown prices show as "Price unknown"
+  and are left out of price statistics, never counted as free. Old `market_history` samples written before this
+  change may still hold 0 for unknown prices.
 
 ## AI assistance disclosure
 

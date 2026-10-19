@@ -377,7 +377,7 @@ async def _chat_turn(session_id: str, msg: str, user_key: str) -> AsyncGenerator
 
         # Populate session market store for multi-turn matching
         sess["market"] = {
-            "competitors": {c["name"]: {"name": c["name"], "price": float(c.get("price_usd", 29.0))} for c in competitors},
+            "competitors": {c["name"]: {"name": c["name"], "price": c.get("price_usd")} for c in competitors},
             "grievances": {entity_id("griev", cmp["text"]): {"id": entity_id("griev", cmp["text"]), "text": cmp["text"], "feature": entity_id("feat", cmp.get("feature", "Core Engine")), "competitor": cmp.get("competitor", "Incumbent")} for cmp in complaints},
             "features": {entity_id("feat", cmp.get("feature", "Core Engine")): {"name": cmp.get("feature", "Core Engine")} for cmp in complaints}
         }
@@ -397,7 +397,8 @@ async def _chat_turn(session_id: str, msg: str, user_key: str) -> AsyncGenerator
         yield f"data: {json.dumps({'type': 'graph_delta', 'nodes': cy_nodes, 'edges': cy_edges, 'focus': idea_node, 'superseded': []})}\n\n"
 
         # Tabular evaluation Turn 1
-        first_price = float(statistics.median([float(c.get("price_usd") or 0) for c in competitors])) if competitors else 0.0
+        known_prices = [float(c["price_usd"]) for c in competitors if c.get("price_usd") is not None]
+        first_price = float(statistics.median(known_prices)) if known_prices else None  # unknown prices are not zeros
         tab_verdict = evaluate_market_saturation(
             competitor_count=len(competitors),
             median_price_usd=first_price,

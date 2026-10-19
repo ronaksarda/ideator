@@ -218,17 +218,18 @@ class StrategistAgent:
         reasoning_path = self.graph.get_reasoning_path(idea_id, feature_name)
         
         # 6. Pricing and saturation metrics
-        rec_price = tabular_metrics.get("recommended_entry_price", 19.0)
+        rec_price = tabular_metrics.get("recommended_entry_price")  # None = no known incumbent price
         risk_tier = tabular_metrics.get("risk_tier", "MODERATE")
-        median_price = tabular_metrics.get("median_incumbent_price", 49.0)
+        median_price = tabular_metrics.get("median_incumbent_price")
         saturation_idx = tabular_metrics.get("saturation_index", 50.0)
+        usd = lambda v: f"${v:.0f}/mo" if v is not None else "unknown"
 
         # 7. Local Open-Source AI Inference (Gemma 2B via Ollama)
         gemma_prompt = (
             f"You are an adversarial startup strategist. The startup idea is: '{idea_text}'.\n"
             f"The primary incumbent vulnerability in the market graph is: '{feature_name}'.\n"
             f"User grievances show: {top_wedge.get('sample_grievances', [])[:2]}.\n"
-            f"Incumbent median price is ${median_price}/mo, recommended entry price is ${rec_price}/mo.\n"
+            f"Incumbent median price is {usd(median_price)}, recommended entry price is {usd(rec_price)}.\n"
             f"In 3 concise bullet points, provide: 1) The unbundled Day-1 MVP wedge, 2) Three specific bloat features to cut on Day 1, 3) Monetization strategy.\n"
             f"Output in concise plain text."
         )
@@ -237,14 +238,14 @@ class StrategistAgent:
         
         # Synthesize vulnerabilities and cuts
         vulnerabilities = [
-            f"Bloated pricing models forcing early-stage users into enterprise minimums (${median_price:.0f}/mo).",
+            f"Bloated pricing models forcing early-stage users into enterprise minimums (median incumbent price: {usd(median_price)}).",
             f"Unreliable operational sync and performance degradation around {feature_name}.",
             "Heavy cloud vendor lock-in with closed schemas and lack of zero-telemetry self-hosting options."
         ]
 
         wedge_desc = (
             f"Single-purpose, local-first {feature_name} with zero telemetry, instant SQLite persistence, "
-            f"and 1-click export undercutting incumbents at ${rec_price:.0f}/mo."
+            f"and 1-click export" + (f" undercutting incumbents at {usd(rec_price)}." if rec_price is not None else ".")
         )
 
         day1_cuts = [
@@ -254,8 +255,9 @@ class StrategistAgent:
         ]
 
         monetization = (
-            f"Undercut incumbents at ${rec_price:.0f}/month (vs ${median_price:.0f}/mo median). "
-            f"Market saturation rated {risk_tier} ({saturation_idx}% index). "
+            (f"Undercut incumbents at {usd(rec_price)} (vs {usd(median_price)} median). " if rec_price is not None
+               else "No incumbent price found, so no entry price is suggested. ")
+            + f"Experimental saturation heuristic (not validated): {risk_tier} ({saturation_idx}% index). "
             f"Target solo developers and self-hosted engineering teams looking to escape cloud markups."
         )
 
@@ -418,12 +420,12 @@ def data_only_report(idea_text: str, market: Dict[str, Any], tab: Dict[str, Any]
         "competitors": [{"name": c["name"], "best_at": c.get("snippet", "")[:140] or "—",
                          "worst_at": ", ".join(sorted({g.get("feature", "") for g in cmps if g.get("competitor") == c["name"]})) or "—",
                          "users_say": " / ".join(t[:120] for t in by_comp.get(c["name"], [])[:2]) or "No complaints found",
-                         "price": f"${c['price_usd']:.0f}/mo" if c.get("price_usd") else "Free / in-app"} for c in comps],
+                         "price": "Price unknown" if c.get("price_usd") is None else f"${c['price_usd']:.0f}/mo" if c["price_usd"] else "Free"} for c in comps],
         "user_needs": [f"**{topic}** ({len(texts)} mentions): \"{texts[0][:160]}\""
                        for topic, texts in sorted(_group(cmps).items(), key=lambda kv: -len(kv[1]))],
         "pricing": {"market_range": f"${prices[0]:.0f}-${prices[-1]:.0f}/mo" if prices else "unknown",
                     "users_will_pay": "", "recommended": f"${rec:.0f}/mo" if rec else "",
-                    "why": f"market saturation {tab.get('saturation_index', '?')}%", "feature_to_justify_price": ""},
+                    "why": f"experimental saturation heuristic (not validated): {tab.get('saturation_index', '?')}%", "feature_to_justify_price": ""},
         "features": [],
         "build_plan": [],
         "action_plan": [{"feature": topic, "who_has_it": ", ".join(sorted({g.get("competitor", "") for g in cmps if (g.get("feature") or "General feedback") == topic} - {"", GENERAL})),
@@ -531,7 +533,7 @@ def followup_fallback(message: str, findings: List[Dict[str, Any]], plan: List[D
     out.append("## What not to do\n- Don't copy features users already complain about without fixing them.")
     priced = [c for c in comps if c.get("price_usd")]
     out.append("## Pricing\n" + ("\n".join(f"- {c['name']}: ${float(c['price_usd']):.2f}/mo" for c in priced[:5])
-                                 or "- Competitors found are free or have no listed price."))
+                                 or "- No competitor price found (free or unknown)."))
     return "\n\n".join(out)
 
 

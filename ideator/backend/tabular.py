@@ -17,17 +17,21 @@ def _sigmoid(x: float) -> float:
         return z / (1.0 + z)
 
 
+EXPERIMENTAL_NOTE = ("Experimental heuristic, not a validated market prediction: hand-set weights / four anchor rows, "
+                     "never evaluated against labeled markets.")
+
+
 def _heuristic_bayesian_eval(
     n_comp: int,
-    p_median: float,
+    p_median: Optional[float],
     n_complaints: int,
     has_oss: int
 ) -> Dict[str, Any]:
     """
-    Heuristic fallback used when TabPFN is unavailable.
+    Heuristic fallback used when TabPFN is unavailable. p_median None = no known competitor price.
     S = sigmoid(0.35 * n_comp + 0.015 * p_median - 0.08 * n_complaints - 0.8 * has_oss)
     """
-    z = 0.35 * n_comp + 0.015 * p_median - 0.08 * n_complaints - 0.8 * has_oss
+    z = 0.35 * n_comp + 0.015 * (p_median or 0.0) - 0.08 * n_complaints - 0.8 * has_oss
     s = _sigmoid(z)
 
     if s < 0.35:
@@ -39,8 +43,10 @@ def _heuristic_bayesian_eval(
     else:
         tier = "CRITICAL"
 
-    # Undercutting target price
-    if tier in ("LOW", "MODERATE"):
+    # Undercutting target price; no known incumbent price means nothing to undercut
+    if p_median is None:
+        target_price = None
+    elif tier in ("LOW", "MODERATE"):
         target_price = round(max(19.00, p_median * (1.0 - s * 0.5)), 2)
     else:
         target_price = round(max(9.00, min(p_median * 0.40, p_median * (1.0 - s * 0.5))), 2)
@@ -55,8 +61,10 @@ def _heuristic_bayesian_eval(
         "risk_tier": tier,
         "confidence": confidence,
         "recommended_entry_price": target_price,
-        "median_incumbent_price": round(p_median, 2),
-        "engine_used": "heuristic-bayesian"
+        "median_incumbent_price": None if p_median is None else round(p_median, 2),
+        "engine_used": "heuristic-bayesian",
+        "experimental": True,
+        "note": EXPERIMENTAL_NOTE,
     }
 
 
@@ -85,13 +93,15 @@ def evaluate_market_saturation(
     elif args and isinstance(args[0], dict):
         d = args[0]
         n_comp = int(d.get("competitor_count", 0))
-        p_med = float(d.get("median_price_usd", d.get("price_usd", 29.0)))
+        p_med = d.get("median_price_usd", d.get("price_usd"))
+        p_med = None if p_med is None else float(p_med)
         n_comp_cnt = int(d.get("complaint_count", 0))
         oss = int(d.get("has_open_source", 0))
         rev_vol = int(d.get("review_volume", d.get("g2_review_volume", 0)))
     else:
         n_comp = int(competitor_count if competitor_count is not None else kwargs.get("n_comp", 0))
-        p_med = float(median_price_usd if median_price_usd is not None else kwargs.get("p_med", 29.0))
+        p_med = median_price_usd if median_price_usd is not None else kwargs.get("p_med")
+        p_med = None if p_med is None else float(p_med)
         n_comp_cnt = int(complaint_count if complaint_count is not None else kwargs.get("n_complaints", 0))
         oss = int(has_open_source if has_open_source is not None else kwargs.get("has_oss", 0))
         rev_vol = int(review_volume if review_volume is not None else kwargs.get("g2_review_volume", 0))
@@ -103,12 +113,12 @@ def evaluate_market_saturation(
     )
 
     # Attempt Primary Engine if token present
-    if tabpfn_token and not settings.mock_tabpfn and not os.getenv("PYTEST_CURRENT_TEST"):
+    if tabpfn_token and p_med is not None and not settings.mock_tabpfn and not os.getenv("PYTEST_CURRENT_TEST"):
         try:
             import pandas as pd
             from tabpfn_client import TabPFNClassifier
 
-            # Minimal calibrated anchor training set
+            # Four hand-made anchor rows, one per class: too few to calibrate anything. Output is flagged experimental.
             X_train = pd.DataFrame([
                 {"competitor_count": 1, "median_price_usd": 15.0, "complaint_count": 8, "has_open_source": 1},
                 {"competitor_count": 3, "median_price_usd": 39.0, "complaint_count": 18, "has_open_source": 0},
@@ -140,7 +150,9 @@ def evaluate_market_saturation(
                 "confidence": round(conf, 2),
                 "recommended_entry_price": target_price,
                 "median_incumbent_price": round(p_med, 2),
-                "engine_used": "tabpfn-client"  # version is whatever Prior Labs serves; do not claim one
+                "engine_used": "tabpfn-client",  # version is whatever Prior Labs serves; do not claim one
+                "experimental": True,
+                "note": EXPERIMENTAL_NOTE,
             }
         except Exception:
             pass

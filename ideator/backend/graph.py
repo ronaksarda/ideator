@@ -18,6 +18,12 @@ def entity_id(prefix: str, val: Any) -> str:
     return f"{prefix}_{hash_str}"
 
 
+def _price(comp: Dict[str, Any]) -> Optional[float]:
+    """Monthly USD price: None = unknown, 0.0 = explicitly free, >0 = known."""
+    p = comp.get("price_usd", comp.get("pricing_usd"))
+    return None if p is None else float(p)
+
+
 
 
 
@@ -142,26 +148,27 @@ class MarketGraph:
             }
 
 
-            price_val = float(comp.get("price_usd", comp.get("pricing_usd", 29.0)))
-            p_id = entity_id("price", f"{c_name}_{price_val}")
-            q_price = f"MATCH (c:Competitor {{id: '{c_id}'}}) MERGE (p:Pricing {{id: '{p_id}'}}) SET p.amount_usd = {price_val} MERGE (c)-[:PRICED_AT]->(p)"
-            executed_queries.append(q_price)
+            price_val = _price(comp)  # None = unknown: no Pricing node, so it never counts as free
+            if price_val is not None:
+                p_id = entity_id("price", f"{c_name}_{price_val}")
+                q_price = f"MATCH (c:Competitor {{id: '{c_id}'}}) MERGE (p:Pricing {{id: '{p_id}'}}) SET p.amount_usd = {price_val} MERGE (c)-[:PRICED_AT]->(p)"
+                executed_queries.append(q_price)
 
-            self._mem_nodes[p_id] = {
-                "id": p_id,
-                "label": f"${price_val:.0f}/mo",
-                "type": "pricing",
-                "color": "#f59e0b",
-                "amount_usd": price_val,
-                "cypher_query": q_price
-            }
-            edge_comp_price = f"{c_id}->{p_id}:PRICED_AT"
-            self._mem_edges[edge_comp_price] = {
-                "id": entity_id("edge", edge_comp_price),
-                "source": c_id,
-                "target": p_id,
-                "label": "PRICED_AT"
-            }
+                self._mem_nodes[p_id] = {
+                    "id": p_id,
+                    "label": f"${price_val:.0f}/mo" if price_val else "Free",
+                    "type": "pricing",
+                    "color": "#f59e0b",
+                    "amount_usd": price_val,
+                    "cypher_query": q_price
+                }
+                edge_comp_price = f"{c_id}->{p_id}:PRICED_AT"
+                self._mem_edges[edge_comp_price] = {
+                    "id": entity_id("edge", edge_comp_price),
+                    "source": c_id,
+                    "target": p_id,
+                    "label": "PRICED_AT"
+                }
 
             raw_features = comp.get("features", [])
             features_to_link = raw_features if raw_features else ["Core Service/API"]
@@ -267,27 +274,26 @@ class MarketGraph:
                 for comp in active_comps:
                     c_name = comp.get("name", "Unknown Competitor")
                     c_id = comp_id_map[c_name]
-                    price_val = float(comp.get("price_usd", comp.get("pricing_usd", 29.0)))
-                    p_id = entity_id("price", f"{c_name}_{price_val}")
+                    price_val = _price(comp)
                     self._graph.query(
                         """
                         MATCH (u:UserIdea {id: $u_id})
                         MERGE (c:Competitor {id: $c_id})
                         SET c.name = $c_name, c.url = $url
                         MERGE (u)-[:TARGETS]->(c)
-                        MERGE (p:Pricing {id: $p_id})
-                        SET p.amount_usd = $price_val
-                        MERGE (c)-[:PRICED_AT]->(p)
                         """,
-                        {
-                            "u_id": u_id,
-                            "c_id": c_id,
-                            "c_name": c_name,
-                            "url": comp.get("url", ""),
-                            "p_id": p_id,
-                            "price_val": price_val
-                        }
+                        {"u_id": u_id, "c_id": c_id, "c_name": c_name, "url": comp.get("url", "")}
                     )
+                    if price_val is not None:
+                        self._graph.query(
+                            """
+                            MATCH (c:Competitor {id: $c_id})
+                            MERGE (p:Pricing {id: $p_id})
+                            SET p.amount_usd = $price_val
+                            MERGE (c)-[:PRICED_AT]->(p)
+                            """,
+                            {"c_id": c_id, "p_id": entity_id("price", f"{c_name}_{price_val}"), "price_val": price_val}
+                        )
                     raw_features = comp.get("features", [])
                     for feat in raw_features:
                         f_id = entity_id("feat", feat)
@@ -380,7 +386,7 @@ class MarketGraph:
 MATCH (:UserIdea {id: $u})-[:TARGETS]->(c:Competitor) WHERE c.name <> $general
 OPTIONAL MATCH (c)-[:PRICED_AT]->(pr:Pricing)
 RETURN c.id, c.name, c.url, max(pr.amount_usd)""", p).result_set:
-            node(cid, "competitor", f"{name} · {f'${price:.0f}/mo' if price else 'Free'}", name=name, url=url or "", amount_usd=price or 0)
+            node(cid, "competitor", f"{name} · {'Price unknown' if price is None else f'${price:.0f}/mo' if price else 'Free'}", name=name, url=url or "", amount_usd=price)
             edge(idea[0][0], "TARGETS", cid)
         for cid, fid, fname in q("""
 MATCH (:UserIdea {id: $u})-[:TARGETS]->(c:Competitor)-[:OFFERS]->(f:Feature) WHERE c.name <> $general
@@ -420,14 +426,14 @@ RETURN d.id, d.text, collect(n.id)""", p).result_set:
         """Copy this idea's competitors into the shared `market_history` graph: TabPFN's training data for pricing."""
         if not (self._connected and self._graph) or os.getenv("PYTEST_CURRENT_TEST"):
             return 0  # tests use made-up markets; they must not become training data
-        rows = [{"id": cid, "name": name, "n_features": nf, "n_complaints": ng, "price": float(pr or 0)} for cid, name, nf, ng, pr in
+        rows = [{"id": cid, "name": name, "n_features": nf, "n_complaints": ng, "price": pr} for cid, name, nf, ng, pr in
                 self._graph.query("""
 MATCH (:UserIdea {id: $u})-[:TARGETS]->(c:Competitor) WHERE c.name <> $general
 OPTIONAL MATCH (c)-[:OFFERS]->(f:Feature)
 OPTIONAL MATCH (c)-[:DRAWS_COMPLAINT]->(g:Grievance)
 OPTIONAL MATCH (c)-[:PRICED_AT]->(p:Pricing)
 RETURN c.id, c.name, count(DISTINCT f), count(DISTINCT g), max(p.amount_usd)""", {"u": idea_node, "general": GENERAL}).result_set]
-        rows = [r for r in rows if r["n_features"] or r["price"]]  # placeholder "companies" (e.g. "General Apps") teach nothing
+        rows = [r for r in rows if r["price"] is not None]  # unknown price is not a training label; free (0) is
         if rows:
             self._falkor.select_graph("market_history").query(
                 "UNWIND $rows AS r MERGE (s:Sample {id: r.id}) SET s.name = r.name, s.n_features = r.n_features, "
@@ -511,14 +517,14 @@ ORDER BY complaint_count DESC, avg_pricing_usd DESC"""
             if e["source"] == u_id and e["label"] == "TARGETS"
         }
 
-        comp_pricing: Dict[str, float] = {}
+        comp_pricing: Dict[str, Optional[float]] = {}
         for c_id in target_comps:
             prices = [
                 self._mem_nodes[e["target"]]["amount_usd"]
                 for e in self._mem_edges.values()
                 if e["source"] == c_id and (e["label"] in ("PRICED_AT", "HAS_PRICING")) and e["target"] in self._mem_nodes
             ]
-            comp_pricing[c_id] = prices[0] if prices else 29.0
+            comp_pricing[c_id] = prices[0] if prices else None  # unknown, excluded from the average below
 
         feature_stats: Dict[str, Dict[str, Any]] = {}
         for e1 in self._mem_edges.values():
@@ -543,14 +549,15 @@ ORDER BY complaint_count DESC, avg_pricing_usd DESC"""
                             }
                         feature_stats[f_name]["complaints"].add(g_id)
                         feature_stats[f_name]["competitors"].add(comp_name)
-                        feature_stats[f_name]["prices"].append(comp_pricing.get(c_id, 29.0))
+                        if comp_pricing.get(c_id) is not None:
+                            feature_stats[f_name]["prices"].append(comp_pricing[c_id])
                         if len(feature_stats[f_name]["sample_grievances"]) < 3 and g_text:
                             feature_stats[f_name]["sample_grievances"].append(g_text)
 
         result: List[Dict[str, Any]] = []
         for feat, data in feature_stats.items():
-            prices = data["prices"] or [0.0]
-            avg_price = sum(prices) / len(prices)
+            prices = data["prices"]
+            avg_price = sum(prices) / len(prices) if prices else None
             result.append({
                 "feature": feat,
                 "complaint_count": len(data["complaints"]),
@@ -560,7 +567,7 @@ ORDER BY complaint_count DESC, avg_pricing_usd DESC"""
                 "sample_grievances": data["sample_grievances"]
             })
 
-        result.sort(key=lambda x: (x["complaint_count"], x["avg_pricing_usd"]), reverse=True)
+        result.sort(key=lambda x: (x["complaint_count"], x["avg_pricing_usd"] or 0.0), reverse=True)
         elapsed_ms = round((time.perf_counter() - start_t) * 1000, 2)
         meta = {
             "cypher_query": cypher_query.replace("$u_id", f"'{u_id}'"),
@@ -693,7 +700,7 @@ ORDER BY complaint_count DESC, avg_pricing_usd DESC"""
         comp_scores: Dict[str, Dict[str, Any]] = {}
         for c_id in target_comps:
             c_name = self._mem_nodes.get(c_id, {}).get("label", "Incumbent")
-            price = self._mem_nodes.get(c_id, {}).get("amount_usd", 29.0)
+            price = self._mem_nodes.get(c_id, {}).get("amount_usd")  # None = unknown
             comp_scores[c_id] = {
                 "id": c_id,
                 "competitor": c_name,
@@ -742,7 +749,7 @@ ORDER BY complaint_count DESC, avg_pricing_usd DESC"""
         for rank, w in enumerate(wedge_data):
             feat = w.get("feature", "Core Engine")
             complaints = w.get("complaint_count", 0)
-            avg_price = w.get("avg_pricing_usd", 29.0)
+            avg_price = w.get("avg_pricing_usd") or 0.0  # unknown adds no price weight
             # Opportunity score: grievance density scaled by incumbent price
             opp_score = min(99.0, round(complaints * 18.0 + (avg_price * 0.25), 1))
             gaps.append({

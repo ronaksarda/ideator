@@ -245,7 +245,7 @@ class IdeaMemory:
         )
         if live is not None and live.result_set:
             for cid, name, price in live.result_set:
-                comps[cid] = {"id": cid, "name": name, "price": float(price or 0), "features": set()}
+                comps[cid] = {"id": cid, "name": name, "price": None if price is None else float(price), "features": set()}
             for cid, fid, fname in self._run(
                 "MATCH (u:UserIdea {id: $u})-[:TARGETS]->(c)-[:OFFERS]->(f:Feature) RETURN c.id, f.id, f.name",
                 {"u": root_uid},
@@ -265,13 +265,13 @@ class IdeaMemory:
         for e in edges:
             if e["source"] == root_uid and e["label"] == "TARGETS":
                 cid = e["target"]
-                comps[cid] = {"id": cid, "name": nodes[cid]["label"], "price": 0.0, "features": set()}
+                comps[cid] = {"id": cid, "name": nodes[cid]["label"], "price": None, "features": set()}
         for e in edges:
             src, tgt, lbl = e["source"], e["target"], e["label"]
             if src not in comps:
                 continue
             if lbl == "PRICED_AT":
-                comps[src]["price"] = float(nodes[tgt].get("amount_usd", 0))
+                comps[src]["price"] = float(nodes[tgt]["amount_usd"])
             elif lbl == "OFFERS":
                 comps[src]["features"].add(tgt)
                 feats[tgt] = {"id": tgt, "name": nodes[tgt]["label"]}
@@ -347,11 +347,11 @@ def feature_vector(market: Dict[str, Any], solves: Set[str], omits: Set[str],
         if g["id"] in solves or g["feature"] in omits:
             decoupled.add(g["competitor"])
     coupled = [c for c in comps if c not in decoupled]
-    prices = [c["price"] for c in comps.values() if c["price"] > 0] or [29.0]
-    median = statistics.median(prices)
+    prices = [c["price"] for c in comps.values() if c["price"]]  # drops unknown (None) and free (0)
+    median = statistics.median(prices) if prices else None
     return {
         "competitor_count": len(coupled) if solves or omits else len(comps),
-        "median_price_usd": min(median, price) if price is not None else median,
+        "median_price_usd": price if median is None else min(median, price) if price is not None else median,
         "complaint_count": len(market["grievances"]) + 3 * len(solves),
         "has_open_source": 1,
         "decoupled_competitors": sorted(comps[c]["name"] for c in decoupled),
